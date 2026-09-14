@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "karamble.omabudget",
+  "name": "OMABUDGET",
+  "version": "0.1.0",
+  "author": "karamble",
+  "license": "ISC",
+  "description": "Local-first personal finance: accounts, a ledger, budgets and bills, stored on this machine and nowhere else",
+  "repository": "https://github.com/karamble/omarchy-omabudget",
+  "kinds": [
+    "bar-widget",
+    "panel",
+    "service"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml",
+    "panel": "App.qml",
+    "service": "Service.qml"
+  },
+  "barWidget": {
+    "displayName": "OMABUDGET",
+    "description": "Spending this period at a glance; the app opens as its own window",
+    "category": "Productivity",
+    "aliases": [
+      "budget",
+      "money",
+      "finance",
+      "expenses",
+      "ledger",
+      "bills"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "addr": "127.0.0.1:8097",
+      "refreshSec": 30,
+      "blurAmounts": false
+    },
+    "schema": [
+      {
+        "key": "addr",
+        "type": "string",
+        "label": "Daemon address",
+        "description": "Where the OMABUDGET daemon is listening. Loopback by design.",
+        "defaultValue": "127.0.0.1:8097"
+      },
+      {
+        "key": "refreshSec",
+        "type": "integer",
+        "label": "Bar refresh (seconds)",
+        "description": "How often the bar figure is re-read. The daemon keeps its own state; this only controls the glance.",
+        "min": 5,
+        "max": 600,
+        "step": 5,
+        "defaultValue": 30
+      },
+      {
+        "key": "blurAmounts",
+        "type": "boolean",
+        "label": "Hide amounts",
+        "description": "Blur every figure in the bar and the app, for screen sharing. Toggle with h inside the app.",
+        "defaultValue": false
+      }
+    ]
+  }
+}

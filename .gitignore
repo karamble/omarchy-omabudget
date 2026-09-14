@@ -1,0 +1,23 @@
+# Built helpers. Source only ships; the binaries are compiled on the user's
+# machine and must never be committed. The bare names catch a go build run
+# from the repo root, which is how two of them were committed once.
+bin/
+*.exe
+/omabudget
+/omabudgetd
+
+# Go test and coverage output.
+*.test
+*.out
+coverage.*
+
+# Local configuration and state, if a run is pointed at the repo.
+config.json
+ledger.db
+ledger.db-*
+triggers.json
+
+# Editor and OS noise.
+*.swp
+*~
+.DS_Store
