@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../components"
 
 // Accounts: the list with balances on the left, the chosen account and its
 // recent postings on the right. a adds, Enter edits, x closes or reopens,
@@ -305,54 +306,23 @@ Item {
                 opacity: cardHover.hovered ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: view.colourMs; easing.type: Easing.OutCubic } }
 
-                component Action: Rectangle {
-                  id: act
-                  property string glyph: ""
-                  property color tint: view.dim
-                  property string hint: ""
-                  signal triggered()
-                  width: Style.space(28)
-                  height: Style.space(28)
-                  radius: Style.cornerRadius
-                  color: actMouse.containsMouse ? Style.hoverFill : "transparent"
-                  Behavior on color { ColorAnimation { duration: view.colourMs } }
-                  Text {
-                    anchors.centerIn: parent
-                    text: act.glyph
-                    color: actMouse.containsMouse ? act.tint : view.dimmer
-                    font.family: view.ff
-                    font.pixelSize: Style.font.body
-                    Behavior on color { ColorAnimation { duration: view.colourMs } }
-                  }
-                  MouseArea {
-                    id: actMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: act.triggered()
-                    // The kit's own tooltip, rather than the attached one
-                    // from Controls, which is not imported here.
-                    PanelToolTip {
-                      visible: actMouse.containsMouse && act.hint !== ""
-                      text: act.hint
-                      fontFamily: view.ff
-                    }
-                  }
-                }
 
-                Action {
+                RowAction {
+                  app: view.app
                   glyph: "󰏫"
                   tint: view.accent
                   hint: "Edit this account"
                   onTriggered: { view.cursor = cardItem.index; view.openEditor(cardItem.modelData) }
                 }
-                Action {
+                RowAction {
+                  app: view.app
                   glyph: "󰑐"
                   tint: view.accent
                   hint: "Hold a statement against it"
                   onTriggered: { view.cursor = cardItem.index; view.openSheet() }
                 }
-                Action {
+                RowAction {
+                  app: view.app
                   glyph: "󰩺"
                   tint: view.app ? view.app.expense : view.dim
                   hint: "Remove, if nothing points at it"

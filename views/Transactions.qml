@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../components"
 
 // The ledger: every transaction, filtered and searched, with a row cursor.
 // Enter edits, d deletes with u to undo, b shows the recently deleted.
@@ -18,6 +19,7 @@ Item {
   readonly property color border: app ? app.cardBorder : Style.normalBorderColor
   readonly property color accent: app ? app.accent : Color.accent
   readonly property string ff: app ? app.fontFamily : Style.font.family
+  readonly property int colourMs: app ? app.colourMs : 120
 
   property var rows: []
   property int cursor: 0
@@ -509,10 +511,13 @@ Item {
       readonly property real dateW: Style.space(84)
       readonly property real iconW: Style.space(28)
       readonly property real amountW: Style.space(120)
+      // Always reserved, painted only on hover, so the columns do not shift
+      // under the pointer the way an overlay would.
+      readonly property real actionsW: Style.space(56)
       readonly property real accountW: Style.space(110)
       readonly property real categoryW: Style.space(170)
       readonly property real pad: Style.space(12)
-      readonly property real descW: Math.max(Style.space(80), width - pad * 2 - dateW - iconW - amountW - accountW - categoryW - Style.space(8) * 5)
+      readonly property real descW: Math.max(Style.space(80), width - pad * 2 - dateW - iconW - amountW - accountW - categoryW - actionsW - Style.space(8) * 6)
 
       Item {
         id: head
@@ -529,6 +534,7 @@ Item {
           Caption { width: parent.parent.parent.categoryW; text: "CATEGORY"; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.accountW; text: "ACCOUNT"; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.amountW; text: "AMOUNT"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
+          Item { width: parent.parent.parent.actionsW; height: Style.spacing.hairline }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
       }
@@ -652,7 +658,44 @@ Item {
               font.family: view.ff
               font.pixelSize: Style.font.body
             }
+            Row {
+              id: rowActions
+              width: list.table.actionsW
+              height: parent.height
+              spacing: Style.space(2)
+              visible: opacity > 0
+              opacity: rowHover.hovered ? 1 : 0
+              Behavior on opacity { NumberAnimation { duration: view.colourMs; easing.type: Easing.OutCubic } }
+              RowAction {
+                app: view.app
+                anchors.verticalCenter: parent.verticalCenter
+                size: Style.space(26)
+                glyph: view.bin ? "󰑐" : "󰏫"
+                tint: view.accent
+                hint: view.bin ? "Bring it back" : "Edit this transaction"
+                onTriggered: {
+                  view.cursor = rowItem.index
+                  // In the bin the same verb restores, which is what the d
+                  // key does there too.
+                  if (view.bin) view.deleteCurrent()
+                  else view.openEditor(rowItem.modelData)
+                }
+              }
+              RowAction {
+                app: view.app
+                anchors.verticalCenter: parent.verticalCenter
+                size: Style.space(26)
+                visible: !view.bin
+                glyph: "󰩺"
+                tint: view.app ? view.app.expense : view.dim
+                hint: "Delete, with u to undo"
+                onTriggered: { view.cursor = rowItem.index; view.deleteCurrent() }
+              }
+            }
           }
+          // Hover for the whole row, children included: a child MouseArea
+          // takes it from the row's own, which would make these flicker.
+          HoverHandler { id: rowHover }
           MouseArea {
             id: rowMouse
             anchors.fill: parent
