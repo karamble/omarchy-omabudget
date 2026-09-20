@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"github.com/karamble/omarchy-omabudget/alerts"
 	"github.com/karamble/omarchy-omabudget/config"
 	"github.com/karamble/omarchy-omabudget/domain"
+	"github.com/karamble/omarchy-omabudget/feed"
 	"github.com/karamble/omarchy-omabudget/mcpserver"
 )
 
@@ -32,6 +34,11 @@ type Server struct {
 	logger  *slog.Logger
 	version string
 	started time.Time
+
+	// fetch reads a quote from a source. It is the one thing the daemon does
+	// that leaves this machine, called from the rate fetch handler and
+	// nowhere else; a test replaces it with a fake that counts.
+	fetch func(context.Context, feed.Source) (feed.Quote, error)
 }
 
 func NewServer(cfg *config.Config, logger *slog.Logger, version string) *Server {
@@ -40,6 +47,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, version string) *Server 
 		logger:  logger,
 		version: version,
 		started: time.Now(),
+		fetch:   feed.Fetch,
 	}
 }
 
@@ -106,6 +114,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/rates", s.handleRates)
 	mux.HandleFunc("PUT /api/rates", s.handleSetRate)
 	mux.HandleFunc("DELETE /api/rates/{currency}/{date}", s.handleRemoveRate)
+	mux.HandleFunc("POST /api/rates/fetch", s.handleFetchRates)
+	mux.HandleFunc("POST /api/rates/accept", s.handleAcceptRate)
+	mux.HandleFunc("GET /api/rates/sources", s.handleRateSources)
 	mux.HandleFunc("GET /api/reports/spending", s.handleSpending)
 	mux.HandleFunc("GET /api/reports/metrics", s.handleMetrics)
 	mux.HandleFunc("POST /api/export", s.handleExport)

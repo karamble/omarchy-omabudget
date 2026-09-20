@@ -230,29 +230,51 @@ func TestVersionsAgree(t *testing.T) {
 }
 
 // outbound lists, per package, the symbols that open a connection outward.
-// Using net/http for the loopback server is fine; dialling is not.
+// Using net/http for the loopback server is fine; dialling is not. The feed
+// package's two entry points count too, so the fetch is reached from one
+// place and a second caller is a failure here, not a quiet regression.
 var outbound = map[string][]string{
 	"net/http":   {"Get", "Head", "Post", "PostForm", "NewRequest", "NewRequestWithContext", "DefaultClient", "DefaultTransport", "Client", "Transport"},
 	"net":        {"Dial", "DialTimeout", "DialTCP", "DialUDP", "DialIP", "DialUnix", "Dialer"},
 	"crypto/tls": {"Dial", "DialWithDialer", "Dialer"},
+	"github.com/karamble/omarchy-omabudget/feed": {"Fetch", "Download"},
 }
 
 // outboundFiles are the only files that may use them: the CLI's client,
-// which talks to the loopback daemon, and the rate fetch, which runs only
-// when a person asks.
+// which talks to the loopback daemon, the rate fetch, which runs only when
+// a person asks, and the server's constructor, which hands the fetch to the
+// one handler that calls it.
 var outboundFiles = []string{
 	"client/client.go",
 	"feed/fetch.go",
+	"api/server.go",
 }
 
-// TestOutboundNetworkIsConfined walks every non-test Go file as syntax,
-// resolves import aliases, and fails when a dialling symbol appears outside
-// the two files allowed to. Each of those must itself be found using one,
-// so a renamed file or a detector that stopped matching fails here rather
-// than passing quietly.
-func TestOutboundNetworkIsConfined(t *testing.T) {
+// buildIgnored reports a file the build leaves out, such as a generator run
+// by hand, which is not part of the daemon and may read a source directly.
+func buildIgnored(t *testing.T, path string) bool {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "package ") {
+			return false
+		}
+		if line == "//go:build ignore" {
+			return true
+		}
+	}
+	return false
+}
+
+// walkGo calls fn on every Go file the daemon is built from: not tests, not
+// files the build ignores.
+func walkGo(t *testing.T, fn func(rel, path string)) {
+	t.Helper()
 	root := ".."
-	hits := map[string][]string{}
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -263,21 +285,34 @@ func TestOutboundNetworkIsConfined(t *testing.T) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || buildIgnored(t, path) {
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		if uses := outboundUses(t, path); len(uses) > 0 {
-			hits[filepath.ToSlash(rel)] = uses
-		}
+		fn(filepath.ToSlash(rel), path)
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestOutboundNetworkIsConfined walks every Go file in the build as syntax,
+// resolves import aliases, and fails when a dialling symbol appears outside
+// the files allowed to. Each of those must itself be found using one, so a
+// renamed file or a detector that stopped matching fails here rather than
+// passing quietly.
+func TestOutboundNetworkIsConfined(t *testing.T) {
+	root := ".."
+	hits := map[string][]string{}
+	walkGo(t, func(rel, path string) {
+		if uses := outboundUses(t, path); len(uses) > 0 {
+			hits[rel] = uses
+		}
+	})
 
 	allowed := map[string]bool{}
 	for _, file := range outboundFiles {
@@ -353,6 +388,68 @@ func outboundUses(t *testing.T, file string) []string {
 	})
 	sort.Strings(uses)
 	return uses
+}
+
+// fetchCaller is the one file that may call the server's fetch, and
+// feedEntry the one file in the feed package that may build its client or
+// read through it.
+const (
+	fetchCaller = "api/fx.go"
+	feedEntry   = "feed/fetch.go"
+)
+
+// feedInternals are the feed package's own way to the network, which a new
+// file in that package could reach without naming anything the outbound
+// test watches.
+var feedInternals = []string{"newClient", "fetchWith", "downloadWith"}
+
+// TestFetchHasOneCaller pins the fetch to one call site. The server's fetch
+// is a function field so a test can replace it; this is what keeps a
+// second caller, on a timer or at start, from appearing without a test
+// going red. The feed package's internals are held to their own file the
+// same way.
+func TestFetchHasOneCaller(t *testing.T) {
+	callers := map[string]int{}
+	internals := map[string][]string{}
+	walkGo(t, func(rel, path string) {
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			switch fn := call.Fun.(type) {
+			case *ast.SelectorExpr:
+				if fn.Sel.Name == "fetch" {
+					callers[rel]++
+				}
+			case *ast.Ident:
+				if slices.Contains(feedInternals, fn.Name) && !slices.Contains(internals[rel], fn.Name) {
+					internals[rel] = append(internals[rel], fn.Name)
+				}
+			}
+			return true
+		})
+	})
+	if callers[fetchCaller] != 1 {
+		t.Errorf("%s calls the fetch %d times, want exactly one", fetchCaller, callers[fetchCaller])
+	}
+	for rel, n := range callers {
+		if rel != fetchCaller {
+			t.Errorf("%s calls the fetch %d times: the rate fetch is the only caller", rel, n)
+		}
+	}
+	if len(internals[feedEntry]) == 0 {
+		t.Errorf("%s reads through none of %s: the file or the detector has drifted", feedEntry, strings.Join(feedInternals, ", "))
+	}
+	for rel, names := range internals {
+		if rel != feedEntry {
+			t.Errorf("%s reaches the network through %s", rel, strings.Join(names, ", "))
+		}
+	}
 }
 
 // mcpFile is where the tools the MCP server offers are registered, and

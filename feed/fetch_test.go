@@ -215,3 +215,31 @@ func TestFetchHonoursContext(t *testing.T) {
 		t.Error("a hung server did not time out")
 	}
 }
+
+// TestCheckURLMatchesTheFetch: a URL the setting refuses is one the fetch
+// would refuse, for the same reason, and nothing is dialled to find out.
+func TestCheckURLMatchesTheFetch(t *testing.T) {
+	c := &http.Client{Transport: trap{t}}
+	for raw, ok := range map[string]bool{
+		"https://example.invalid/latest":     true,
+		"http://192.168.1.20:8080/v1/latest": true,
+		"http://localhost/latest":            true,
+		"http://example.invalid/latest":      false,
+		"latest":                             false,
+		"https://":                           false,
+		"ftp://127.0.0.1/latest":             false,
+		"":                                   false,
+	} {
+		err := CheckURL(raw)
+		if (err == nil) != ok {
+			t.Errorf("CheckURL(%q) = %v, want ok=%v", raw, err, ok)
+		}
+		if err == nil {
+			continue
+		}
+		_, fetchErr := fetchWith(context.Background(), c, Frankfurter.At(raw))
+		if fetchErr == nil || !strings.HasSuffix(fetchErr.Error(), err.Error()) {
+			t.Errorf("%q: the fetch says %v, the check says %v", raw, fetchErr, err)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/karamble/omarchy-omabudget/config"
 	"github.com/karamble/omarchy-omabudget/domain"
+	"github.com/karamble/omarchy-omabudget/feed"
 	"github.com/karamble/omarchy-omabudget/money"
 )
 
@@ -226,6 +227,12 @@ type settingsOut struct {
 	PeriodStartDay int    `json:"periodStartDay"`
 	LargeAmount    int64  `json:"largeAmount"`
 	Monitoring     bool   `json:"monitoring"`
+	// RateSource is the source a fetch reads, resolved, and RateSourceURL
+	// the user's own instance when one is set. LastFetch is the one record
+	// kept of the network, absent until a fetch has run.
+	RateSource    string        `json:"rateSource"`
+	RateSourceURL string        `json:"rateSourceUrl,omitempty"`
+	LastFetch     *domain.Fetch `json:"lastFetch,omitempty"`
 }
 
 // settings reads the configuration for the app. The large amount was typed in
@@ -236,12 +243,21 @@ func (s *Server) settings(ctx context.Context) (settingsOut, error) {
 	out := settingsOut{
 		BaseCurrency: c.BaseCurrency, RateReference: c.BaseCurrency, Model: string(c.Model),
 		PeriodStartDay: c.PeriodStartDay, LargeAmount: c.LargeAmount, Monitoring: c.MonitoringOn(),
+		RateSource: c.RateSource, RateSourceURL: c.RateSourceURL,
+	}
+	if out.RateSource == "" {
+		out.RateSource = feed.Sources[0].ID
 	}
 	l := s.Ledger()
 	if l == nil {
 		return out, nil
 	}
 	out.RateReference = l.Reference()
+	if f, ok, err := l.LastFetch(ctx); err != nil {
+		return out, err
+	} else if ok {
+		out.LastFetch = &f
+	}
 	typedIn := c.LargeAmountCurrency
 	if typedIn == "" {
 		typedIn = c.BaseCurrency
@@ -271,12 +287,16 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 // settingsIn changes only the fields it carries. The base currency is any
-// three-letter code that is the rate reference or has a rate on file.
+// three-letter code that is the rate reference or has a rate on file. The
+// rate source is an ID from the registry; a URL goes with it, for a source
+// that allows one, and an empty URL is the source's own endpoint.
 type settingsIn struct {
 	BaseCurrency   *string `json:"baseCurrency"`
 	Model          *string `json:"model"`
 	PeriodStartDay *int    `json:"periodStartDay"`
 	LargeAmount    *string `json:"largeAmount"`
+	RateSource     *string `json:"rateSource"`
+	RateSourceURL  *string `json:"rateSourceUrl"`
 }
 
 func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
@@ -314,9 +334,30 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		large = &v.Minor
 	}
+	// Choosing a source drops a URL set for the last one unless a new one
+	// comes with it. The choice is checked here, not when it is used.
+	var source, sourceURL *string
+	if in.RateSource != nil || in.RateSourceURL != nil {
+		c := s.Config()
+		id, rawURL := c.RateSource, c.RateSourceURL
+		if in.RateSource != nil {
+			id, rawURL = strings.ToLower(strings.TrimSpace(*in.RateSource)), ""
+		}
+		if in.RateSourceURL != nil {
+			rawURL = strings.TrimSpace(*in.RateSourceURL)
+		}
+		if _, err := sourceFor(id, rawURL); err != nil {
+			s.fail(w, err)
+			return
+		}
+		source, sourceURL = &id, &rawURL
+	}
 	err := s.mutate(func(c *config.Config) error {
 		if base != "" {
 			c.BaseCurrency = base
+		}
+		if source != nil {
+			c.RateSource, c.RateSourceURL = *source, *sourceURL
 		}
 		if in.Model != nil {
 			m := config.Model(strings.ToLower(*in.Model))

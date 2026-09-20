@@ -55,6 +55,13 @@ type Config struct {
 	// MCPEnabled exposes the MCP endpoint. Nil reads as off.
 	MCPEnabled *bool `json:"mcpEnabled,omitempty"`
 
+	// RateSource is the exchange rate source a fetch reads, by its ID in the
+	// feed registry, and RateSourceURL an instance of the user's own for a
+	// source that allows one. Both stay empty until chosen, so the default
+	// resolves at use rather than freezing into old files.
+	RateSource    string `json:"rateSource,omitempty"`
+	RateSourceURL string `json:"rateSourceUrl,omitempty"`
+
 	path string
 }
 

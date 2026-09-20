@@ -3,13 +3,16 @@ import qs.Commons
 import qs.Ui
 import "../components"
 
-// Settings: the budgeting model, the period, alerts, the agent endpoint
-// and the token. Every change goes through the CLI like everything else.
+// Settings: the budgeting model, the period, exchange rates, alerts, the
+// agent endpoint and the token. Every change goes through the CLI like
+// everything else, the rate fetch included: it runs only from the button
+// here or the command.
 Item {
   id: view
   property var app: null
   readonly property bool formFocused: baseField.activeFocus || startField.activeFocus || largeField.activeFocus
     || modelGroup.activeFocus || monitoringToggle.activeFocus || mcpToggle.activeFocus
+    || sourceGroup.activeFocus || sourceUrlField.activeFocus
 
   readonly property color fg: app ? app.foreground : Color.foreground
   readonly property color dim: app ? app.dim : Color.foreground
@@ -21,6 +24,17 @@ Item {
   property var settings: null
   property var health: null
   property var endpoint: null
+  // The rate sources a fetch can read from, and what the last press did.
+  property var sources: []
+  property var fetched: null
+  property bool fetching: false
+  readonly property var chosenSource: {
+    var id = view.settings ? String(view.settings.rateSource || "") : ""
+    for (var i = 0; i < view.sources.length; i++)
+      if (view.sources[i].id === id) return view.sources[i]
+    return null
+  }
+  readonly property string reference: view.settings ? String(view.settings.rateReference || "") : ""
 
   function money(minor) { return app && settings ? app.fmt(minor, settings.baseCurrency) : String(minor) }
   function plain(minor) {
@@ -38,9 +52,11 @@ Item {
       if (!baseField.activeFocus) baseField.text = String(data.baseCurrency || "")
       if (!startField.activeFocus) startField.text = String(data.periodStartDay)
       if (!largeField.activeFocus) largeField.text = data.largeAmount > 0 ? view.plain(data.largeAmount) : ""
+      if (!sourceUrlField.activeFocus) sourceUrlField.text = String(data.rateSourceUrl || "")
     })
     app.query(["health"], function (data, err) { if (!err) view.health = data })
     app.query(["mcp"], function (data, err) { if (!err) view.endpoint = data })
+    app.query(["rate", "sources"], function (data, err) { if (!err) view.sources = Array.isArray(data) ? data : [] })
   }
   onAppChanged: reload()
   Connections {
@@ -62,6 +78,48 @@ Item {
   function applyLarge() {
     var v = largeField.text.trim()
     app.run(["settings", "large-amount", v === "" ? "0" : v], v === "" ? "large-amount alerts off" : "large amount set to " + v)
+  }
+  function setSource(id) {
+    var name = id
+    for (var i = 0; i < view.sources.length; i++) if (view.sources[i].id === id) name = view.sources[i].name
+    app.run(["settings", "rate-source", id], "rates are read from " + name)
+  }
+  function applySourceUrl() {
+    if (!view.settings) return
+    var url = sourceUrlField.text.trim()
+    app.run(["settings", "rate-source", String(view.settings.rateSource), "-url", url],
+            url === "" ? "rates are read from the public instance" : "rates are read from " + url)
+  }
+  // The one press that opens a connection outward. It goes through query
+  // rather than run because the result is what is shown, and every view
+  // is told afterwards since the rates it filed move figures everywhere.
+  function fetchRates() {
+    if (view.fetching || !app) return
+    view.fetching = true
+    app.query(["rate", "fetch"], function (data, err) {
+      view.fetching = false
+      if (err) { view.fetched = null; view.app.lastError = err; return }
+      view.fetched = data
+      view.app.lastError = ""
+      view.app.refresh()
+      view.app.changed()
+    })
+  }
+  function acceptHeld(h) {
+    if (!view.fetched) return
+    app.run(["rate", "accept", String(h.currency), String(h.rate), "-date", String(h.date), "-source", String(view.fetched.source)],
+            "filed 1 " + h.currency + " = " + h.rate + " " + view.reference)
+    var rest = []
+    var held = view.fetched.held || []
+    for (var i = 0; i < held.length; i++) if (held[i].currency !== h.currency) rest.push(held[i])
+    var next = Object.assign({}, view.fetched)
+    next.held = rest
+    view.fetched = next
+  }
+  function lastFetchText() {
+    var f = view.settings ? view.settings.lastFetch : null
+    if (!f) return "Never used"
+    return "Last used " + String(f.at || "").slice(0, 10) + ", " + String(f.host || "")
   }
 
   function handleKey(e) {
@@ -187,6 +245,127 @@ Item {
               Apply { text: "Apply"; onClicked: view.applyStart() }
             }
             Note { width: parent.width; text: "1 to 28. Pick your payday and every period, statistic and budget follows it." }
+          }
+
+          TitledCard {
+
+            app: view.app
+            width: parent.width
+            title: "EXCHANGE RATES"
+            Caption { text: "SOURCE" }
+            ButtonGroup {
+              id: sourceGroup
+              options: view.sources.map(function (s) { return { value: s.id, label: s.name } })
+              value: view.settings ? String(view.settings.rateSource || "") : ""
+              foreground: view.fg
+              accent: view.accent
+              fontFamily: view.ff
+              fontSize: Style.font.bodySmall
+              focusable: true
+              onChanged: function (v) { view.setSource(v) }
+            }
+            Note { width: parent.width; text: view.chosenSource ? view.chosenSource.what : "Choosing a source is choosing who sees your address when you press Fetch now." }
+            Caption { text: "READS FROM"; topPadding: Style.space(6); visible: view.chosenSource !== null && view.chosenSource.custom === true }
+            Row {
+              spacing: Style.space(8)
+              visible: view.chosenSource !== null && view.chosenSource.custom === true
+              TextField {
+                id: sourceUrlField
+                width: Style.space(260)
+                foreground: view.fg
+                accent: view.accent
+                font.family: view.ff
+                font.pixelSize: Style.font.body
+                placeholderText: view.chosenSource ? String(view.chosenSource.url || "") : ""
+                Keys.onReturnPressed: view.applySourceUrl()
+                Keys.onEnterPressed: view.applySourceUrl()
+                Keys.onEscapePressed: view.forceActiveFocus()
+              }
+              Apply { text: "Apply"; onClicked: view.applySourceUrl() }
+            }
+            Note {
+              width: parent.width
+              visible: view.chosenSource !== null && view.chosenSource.custom === true
+              text: "Empty reads the public instance. An instance you run yourself is read over https, or plain http only on this machine or a private address."
+            }
+            Row {
+              spacing: Style.space(8)
+              topPadding: Style.space(6)
+              Apply {
+                text: view.fetching ? "Fetching" : "Fetch now"
+                enabled: !view.fetching && view.settings !== null
+                tooltipText: "One request to the source above, every currency it publishes"
+                onClicked: view.fetchRates()
+              }
+              Note { anchors.verticalCenter: parent.verticalCenter; text: "Network: " + view.lastFetchText() }
+            }
+            Note {
+              width: parent.width
+              text: "Nothing is fetched unless you press this or run omabudget rate fetch. The whole list is read, so the request says nothing about what you hold; a rate you typed is never overwritten. Bitcoin, Decred, Litecoin and Ether are on neither source and stay hand entered under Manage."
+            }
+            Column {
+              width: parent.width
+              spacing: Style.space(6)
+              visible: view.fetched !== null
+              Caption { text: "LAST PRESS"; topPadding: Style.space(6) }
+              Body {
+                width: parent.width
+                text: view.fetched ? "Read " + view.fetched.name + " at " + view.fetched.host + ", published " + view.fetched.published : ""
+              }
+              Body {
+                width: parent.width
+                visible: view.fetched && (view.fetched.filed || []).length > 0
+                text: view.fetched ? "Filed: " + (view.fetched.filed || []).join(", ") : ""
+              }
+              Note {
+                width: parent.width
+                visible: view.fetched && (view.fetched.unchanged || []).length > 0
+                text: view.fetched ? "Already on file for that day: " + (view.fetched.unchanged || []).join(", ") : ""
+              }
+              Note {
+                width: parent.width
+                visible: view.fetched && (view.fetched.kept || []).length > 0
+                text: view.fetched ? "Kept as typed by hand: " + (view.fetched.kept || []).join(", ") : ""
+              }
+              Note {
+                width: parent.width
+                visible: view.fetched && (view.fetched.filed || []).length + (view.fetched.unchanged || []).length + (view.fetched.kept || []).length + (view.fetched.held || []).length === 0
+                text: "Nothing to file: no currency in use is quoted by this source."
+              }
+              Repeater {
+                model: view.fetched ? (view.fetched.held || []) : []
+                delegate: Column {
+                  required property var modelData
+                  width: parent ? parent.width : 0
+                  spacing: Style.space(2)
+                  Body {
+                    width: parent.width
+                    text: "Held: 1 " + modelData.currency + " = " + modelData.rate + " " + view.reference
+                      + (modelData.previous ? "  (was " + modelData.previous + " on " + modelData.previousDate + ")" : "")
+                  }
+                  Note { width: parent.width; text: modelData.reason }
+                  Apply { text: "Apply " + modelData.currency; onClicked: view.acceptHeld(modelData) }
+                }
+              }
+              Note {
+                width: parent.width
+                visible: view.fetched && (view.fetched.unquoted || []).length > 0
+                text: view.fetched ? "Not quoted by " + view.fetched.name + ", entered by hand: " + (view.fetched.unquoted || []).join(", ") : ""
+              }
+              Repeater {
+                model: view.fetched ? (view.fetched.notes || []) : []
+                delegate: Note {
+                  required property var modelData
+                  width: parent ? parent.width : 0
+                  text: String(modelData)
+                }
+              }
+              Note {
+                width: parent.width
+                visible: view.fetched && view.fetched.rederived > 0
+                text: view.fetched ? "Re-derived " + view.fetched.rederived + " transactions" : ""
+              }
+            }
           }
 
           TitledCard {

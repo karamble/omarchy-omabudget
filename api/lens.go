@@ -180,6 +180,11 @@ func checkBase(ctx context.Context, l *domain.Ledger, code string) (string, erro
 	if code == l.Reference() {
 		return code, nil
 	}
+	// Choosing a currency to show figures in brings it into use, so it gets
+	// its starting rate here like an account would.
+	if _, err := l.SeedFor(ctx, code); err != nil {
+		return "", err
+	}
 	_, ok, err := l.RateOn(ctx, code, "")
 	if err != nil {
 		return "", err

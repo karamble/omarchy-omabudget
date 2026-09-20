@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/karamble/omarchy-omabudget/domain"
+	"github.com/karamble/omarchy-omabudget/feed"
 )
 
 // setBase changes the base through the API and reports the status.
@@ -177,29 +178,38 @@ func TestBaseCurrencyIsALens(t *testing.T) {
 	}
 }
 
-// TestBaseCurrencyIsChecked: the base is three letters, the reference or a
-// currency with a rate on file, and the base cannot lose its last rate.
+// TestBaseCurrencyIsChecked: the base is three letters and either the
+// reference or a currency with a rate on file. Choosing a shipped currency
+// files its starting rate on the spot, so a person is not sent to the rate
+// table first; one the quote does not carry is still refused. The base
+// cannot lose its last rate.
 func TestBaseCurrencyIsChecked(t *testing.T) {
 	s, l := newTestServer(t, 1)
-	for _, code := range []string{"eu", "euro", "pl1", "USD", ""} {
+	for _, code := range []string{"eu", "euro", "pl1", "BTC", ""} {
 		if status, _ := setBase(t, s, code); status != http.StatusUnprocessableEntity {
 			t.Errorf("base %q: %d, want 422", code, status)
 		}
 	}
-	if _, err := l.SetRate(t.Context(), "USD", "0.9", "2026-01-01"); err != nil {
-		t.Fatal(err)
-	}
 	if status, st := setBase(t, s, "usd"); status != http.StatusOK || st.BaseCurrency != "USD" {
 		t.Fatalf("base USD: %d %+v", status, st)
 	}
-	if status, _ := call(t, s, "DELETE", "/api/rates/USD/2026-01-01", nil); status != http.StatusUnprocessableEntity {
+	_, body := call(t, s, "GET", "/api/rates?currency=USD", nil)
+	var rates []domain.FXRate
+	json.Unmarshal(body, &rates)
+	if len(rates) != 1 || rates[0].Date != feed.Builtin.Date || rates[0].Rate != "0.87260035" || rates[0].Source != domain.SourceSeed {
+		t.Fatalf("starting rate: %+v", rates)
+	}
+	if status, _ := call(t, s, "DELETE", "/api/rates/USD/"+feed.Builtin.Date, nil); status != http.StatusUnprocessableEntity {
 		t.Errorf("the base's last rate went: %d", status)
+	}
+	if _, err := l.SetRate(t.Context(), "USD", "0.9", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := call(t, s, "DELETE", "/api/rates/USD/"+feed.Builtin.Date, nil); status != http.StatusOK {
+		t.Errorf("a rate of the base with another on file stayed: %d", status)
 	}
 	if _, err := l.SetRate(t.Context(), "USD", "0.91", "2026-06-01"); err != nil {
 		t.Fatal(err)
-	}
-	if status, _ := call(t, s, "DELETE", "/api/rates/USD/2026-01-01", nil); status != http.StatusOK {
-		t.Errorf("an earlier rate of the base stayed: %d", status)
 	}
 
 	// The large amount is filed in the base it was typed in and shown in

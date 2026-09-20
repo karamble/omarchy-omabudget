@@ -57,11 +57,8 @@ func fetchWith(ctx context.Context, c *http.Client, src Source) (Quote, error) {
 
 // downloadWith performs one GET and returns the body, capped.
 func downloadWith(ctx context.Context, c *http.Client, src Source) ([]byte, error) {
-	u, err := url.Parse(src.URL)
+	u, err := checkedURL(src.URL)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", src.Name, err)
-	}
-	if err := allowed(u); err != nil {
 		return nil, fmt.Errorf("%s: %w", src.Name, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -106,6 +103,29 @@ func newClient() *http.Client {
 			return allowed(req.URL)
 		},
 	}
+}
+
+// CheckURL reports whether a fetch would use a URL, with the message the
+// fetch would give, so a setting can be refused when it is saved rather
+// than when it is used. Nothing is dialled.
+func CheckURL(raw string) error {
+	_, err := checkedURL(raw)
+	return err
+}
+
+// checkedURL parses a URL and applies allowed to it.
+func checkedURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if u.Host == "" {
+		return nil, fmt.Errorf("%q names no host", raw)
+	}
+	if err := allowed(u); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 // allowed is checked before anything is dialled: https, or plain http only

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,5 +35,39 @@ func TestLargeAmountCurrencyBackfill(t *testing.T) {
 	fresh.defaults()
 	if fresh.Version != 2 || fresh.LargeAmountCurrency != "EUR" {
 		t.Errorf("fresh config = version %d, large amount in %q", fresh.Version, fresh.LargeAmountCurrency)
+	}
+}
+
+// TestRateSourceStaysEmptyByDefault: the source is chosen at use, not
+// written into the file, so a config saved before a source existed and one
+// saved with none chosen both read the same, and a choice round-trips.
+func TestRateSourceStaysEmptyByDefault(t *testing.T) {
+	fresh := &Config{}
+	fresh.defaults()
+	if fresh.RateSource != "" || fresh.RateSourceURL != "" {
+		t.Errorf("defaults chose a source: %q %q", fresh.RateSource, fresh.RateSourceURL)
+	}
+	path := filepath.Join(t.TempDir(), fileName)
+	fresh.SetPath(path)
+	if err := fresh.Save(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "rateSource") {
+		t.Errorf("an unchosen source was written: %s", raw)
+	}
+	fresh.RateSource, fresh.RateSourceURL = "frankfurter", "http://127.0.0.1:8080/v1/latest"
+	if err := fresh.Save(); err != nil {
+		t.Fatal(err)
+	}
+	back, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.RateSource != "frankfurter" || back.RateSourceURL != "http://127.0.0.1:8080/v1/latest" {
+		t.Errorf("loaded %q %q", back.RateSource, back.RateSourceURL)
 	}
 }

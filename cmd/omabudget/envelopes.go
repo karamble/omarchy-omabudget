@@ -345,9 +345,11 @@ func categoryReport(c *common, cl *client.Client, ctx context.Context, method, p
 //	omabudget settings model envelope
 //	omabudget settings period-start 10
 //	omabudget settings large-amount 500
+//	omabudget settings rate-source frankfurter -url http://192.168.1.20:8080/v1/latest
 func runSettings(args []string) error {
 	fs := flag.NewFlagSet("settings", flag.ExitOnError)
 	c := bind(fs)
+	rawURL := fs.String("url", "", "with rate-source: an instance of your own; empty is the source's own endpoint")
 	pos, err := parseMixed(fs, args)
 	if err != nil {
 		return err
@@ -365,6 +367,13 @@ func runSettings(args []string) error {
 		PeriodStartDay int    `json:"periodStartDay"`
 		LargeAmount    int64  `json:"largeAmount"`
 		Monitoring     bool   `json:"monitoring"`
+		RateSource     string `json:"rateSource"`
+		RateSourceURL  string `json:"rateSourceUrl"`
+		LastFetch      *struct {
+			At     string `json:"at"`
+			Source string `json:"source"`
+			Host   string `json:"host"`
+		} `json:"lastFetch"`
 	}
 	switch {
 	case len(pos) == 0:
@@ -381,8 +390,10 @@ func runSettings(args []string) error {
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"periodStartDay": n}, &out)
 	case len(pos) == 2 && pos[0] == "large-amount":
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"largeAmount": pos[1]}, &out)
+	case len(pos) == 2 && pos[0] == "rate-source":
+		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"rateSource": pos[1], "rateSourceUrl": *rawURL}, &out)
 	default:
-		return errors.New("usage: omabudget settings [base-currency <CODE> | model limits|envelope | period-start <1-28> | large-amount <amount>]")
+		return errors.New("usage: omabudget settings [base-currency <CODE> | model limits|envelope | period-start <1-28> | large-amount <amount> | rate-source <id> [-url URL]]")
 	}
 	if err != nil {
 		return err
@@ -392,5 +403,15 @@ func runSettings(args []string) error {
 	}
 	fmt.Printf("currency      %s\nrates against %s\nmodel         %s\nperiod start  day %d\nlarge amount  %s\nmonitoring    %v\n",
 		out.BaseCurrency, out.RateReference, out.Model, out.PeriodStartDay, money.New(out.LargeAmount, out.BaseCurrency).Format(), out.Monitoring)
+	source := out.RateSource
+	if out.RateSourceURL != "" {
+		source += " at " + out.RateSourceURL
+	}
+	fmt.Printf("rate source   %s\n", source)
+	if out.LastFetch == nil {
+		fmt.Println("network       never used")
+	} else {
+		fmt.Printf("network       last used %s, %s, for exchange rates\n", out.LastFetch.At, out.LastFetch.Host)
+	}
 	return nil
 }

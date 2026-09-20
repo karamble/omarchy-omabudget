@@ -36,14 +36,26 @@ Item {
 
   // Passed to every child. PATH reaches notify-send in /usr/bin, HOME finds
   // the configuration, and the session bus is what notify-send needs to reach
-  // the notification daemon. Nothing else: this daemon never touches the
-  // network, so proxy and trust variables have no business here.
-  readonly property var childEnv: ({
-    "PATH": "/usr/bin:/bin",
-    "HOME": Quickshell.env("HOME") || "",
-    "XDG_RUNTIME_DIR": Quickshell.env("XDG_RUNTIME_DIR") || "",
-    "DBUS_SESSION_BUS_ADDRESS": Quickshell.env("DBUS_SESSION_BUS_ADDRESS") || ""
-  })
+  // the notification daemon. The proxy and trust-root variables come through
+  // when they are set, so the one connection the daemon opens outward, a rate
+  // fetch a person asked for, goes the way this machine is configured to
+  // send it. Nothing else.
+  readonly property var childEnv: root.buildEnv()
+  readonly property var passedEnv: ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR"]
+
+  function buildEnv() {
+    var env = {
+      "PATH": "/usr/bin:/bin",
+      "HOME": Quickshell.env("HOME") || "",
+      "XDG_RUNTIME_DIR": Quickshell.env("XDG_RUNTIME_DIR") || "",
+      "DBUS_SESSION_BUS_ADDRESS": Quickshell.env("DBUS_SESSION_BUS_ADDRESS") || ""
+    }
+    for (var i = 0; i < root.passedEnv.length; i++) {
+      var v = Quickshell.env(root.passedEnv[i])
+      if (v) env[root.passedEnv[i]] = String(v)
+    }
+    return env
+  }
 
   // bin/ is not shipped, so a fresh clone has nothing to run. Both binaries
   // are checked: the app and the bar shell out to the CLI for every read, and

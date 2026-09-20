@@ -111,7 +111,7 @@ Item {
     app.run(["category", back ? "restore" : "archive", String(cat.id)],
             (back ? "restored " : "archived ") + cat.name)
   }
-  // ---- rates, spec 8: entered here, never fetched
+  // ---- rates, spec 8: typed here, or filed by a fetch pressed in Settings
   property var rates: []
   property int rateCursor: 0
   readonly property var currentRate: rates.length > 0 ? rates[Math.min(rateCursor, rates.length - 1)] : null
@@ -625,6 +625,7 @@ Item {
           Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: "FROM" }
           Caption { x: Style.space(140); anchors.verticalCenter: parent.verticalCenter; text: "CURRENCY" }
           Caption { x: Style.space(260); anchors.verticalCenter: parent.verticalCenter; text: "RATE" }
+          Caption { x: Style.space(500); anchors.verticalCenter: parent.verticalCenter; text: "SOURCE" }
           Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
         }
         Text {
@@ -682,6 +683,14 @@ Item {
               color: view.fg
               font.family: view.ff
               font.pixelSize: Style.font.body
+            }
+            Text {
+              x: Style.space(500)
+              anchors.verticalCenter: parent.verticalCenter
+              text: rateRow.modelData.source === "manual" ? "typed" : rateRow.modelData.source === "seed" ? "shipped" : String(rateRow.modelData.source || "")
+              color: view.dim
+              font.family: view.ff
+              font.pixelSize: Style.font.bodySmall
             }
             MouseArea {
               id: rateRowMouse
@@ -953,7 +962,7 @@ Item {
         : view.pane === "Alerts"
         ? "j k move   a arm   Enter change   x disarm   Tab categories"
         : view.pane === "Rates"
-        ? "j k move   a add   x remove   Tab categories   nothing is fetched: a rate is what you last put in"
+        ? "j k move   a add   x remove   Tab categories   a rate is what you put in, or what Fetch now in Settings filed"
         : "j k move   Enter edit   a new   x archive or restore   / search   Tab payees"
       color: view.dimmer
       font.family: view.ff

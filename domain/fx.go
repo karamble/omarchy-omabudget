@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,7 +18,10 @@ import (
 // currency, recorded in the ledger when it was first opened and never moved,
 // so a rate means the same thing whatever currency figures are shown in. A
 // transaction either follows this table or carries a rate of its own; the
-// table is what a balance in another currency is read at.
+// table is what a balance in another currency is read at. Rates get here by
+// being typed, shipped with the binary, or fetched from the source chosen
+// in settings when a person asks; nothing in this package reaches the
+// network, and nothing fetches on its own.
 
 // FXRate is one day's rate for a currency against the reference. Source is
 // where it came from, and Rederived counts the transactions a change to it
@@ -42,35 +45,16 @@ const (
 // that follows the table is re-derived in the same transaction; a row that
 // carries a rate entered by hand is left alone.
 func (l *Ledger) SetRate(ctx context.Context, currency string, rate money.Rate, date string) (FXRate, error) {
-	currency = strings.ToUpper(strings.TrimSpace(currency))
-	if len(currency) != 3 {
-		return FXRate{}, fmt.Errorf("currency %q must be a three-letter code", currency)
-	}
-	if currency == l.reference {
-		return FXRate{}, fmt.Errorf("%s is the rate reference: its rate is always 1", currency)
-	}
-	if _, ok := new(big.Rat).SetString(string(rate)); !ok {
-		return FXRate{}, fmt.Errorf("rate %q is not a number", rate)
-	}
-	// Convert proves the rate is usable and positive, which is the only shape
-	// a reference amount can be derived from.
-	if _, err := money.Convert(money.New(100, currency), rate, l.reference); err != nil {
+	currency, date, err := l.checkRate(currency, rate, date)
+	if err != nil {
 		return FXRate{}, err
-	}
-	if date == "" {
-		date = l.now().Format(dateFmt)
-	}
-	if _, err := time.Parse(dateFmt, date); err != nil {
-		return FXRate{}, fmt.Errorf("date %q must be YYYY-MM-DD", date)
 	}
 	tx, err := l.db.BeginTx(ctx, nil)
 	if err != nil {
 		return FXRate{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO fx_rates (date,currency,rate,source) VALUES (?,?,?,?)
-		ON CONFLICT(date,currency) DO UPDATE SET rate=excluded.rate, source=excluded.source`,
-		date, currency, string(rate), SourceManual); err != nil {
+	if err := l.file(ctx, tx, currency, rate, date, SourceManual); err != nil {
 		return FXRate{}, err
 	}
 	n, err := l.rederive(ctx, tx, currency)
@@ -81,6 +65,34 @@ func (l *Ledger) SetRate(ctx context.Context, currency string, rate money.Rate, 
 		return FXRate{}, err
 	}
 	return FXRate{Date: date, Currency: currency, Rate: rate, Source: SourceManual, Rederived: n}, nil
+}
+
+// checkRate is what any rate must pass before it is filed: a three-letter
+// currency other than the reference, a positive number, and a date, which
+// defaults to today. It reports the currency and date as they will be kept.
+func (l *Ledger) checkRate(currency string, rate money.Rate, date string) (string, string, error) {
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if len(currency) != 3 {
+		return "", "", fmt.Errorf("currency %q must be a three-letter code", currency)
+	}
+	if currency == l.reference {
+		return "", "", fmt.Errorf("%s is the rate reference: its rate is always 1", currency)
+	}
+	if _, ok := new(big.Rat).SetString(string(rate)); !ok {
+		return "", "", fmt.Errorf("rate %q is not a number", rate)
+	}
+	// Convert proves the rate is usable and positive, which is the only shape
+	// a reference amount can be derived from.
+	if _, err := money.Convert(money.New(100, currency), rate, l.reference); err != nil {
+		return "", "", err
+	}
+	if date == "" {
+		date = l.now().Format(dateFmt)
+	}
+	if _, err := time.Parse(dateFmt, date); err != nil {
+		return "", "", fmt.Errorf("date %q must be YYYY-MM-DD", date)
+	}
+	return currency, date, nil
 }
 
 // Rates lists what is on file, newest first, for one currency or all of them.
@@ -184,10 +196,16 @@ func (l *Ledger) RemoveRate(ctx context.Context, currency, date string) error {
 // for every row in currency that follows the table, each at the table's rate
 // for its own date. The whole currency is redone rather than a window, since
 // a date with no rate before it reads the earliest rate on file, so adding
-// or removing the earliest moves rows dated before it. Each amount is
-// converted in Go with the exact rate, and an overflow fails the whole
-// transaction.
+// or removing the earliest moves rows dated before it. The table is read
+// once and each row resolved in Go by the rule rateOn applies; each amount
+// is converted with the exact rate, and an overflow fails the whole
+// transaction. Every cursor is drained before the next query, since the
+// ledger has one connection.
 func (l *Ledger) rederive(ctx context.Context, tx *sql.Tx, currency string) (int, error) {
+	rates, err := l.ratesOf(ctx, tx, currency)
+	if err != nil {
+		return 0, err
+	}
 	type row struct {
 		id     string
 		date   string
@@ -210,42 +228,41 @@ func (l *Ledger) rederive(ctx context.Context, tx *sql.Tx, currency string) (int
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
-	for _, t := range affected {
-		rate, ok, err := l.rateOn(ctx, tx, currency, t.date)
-		if err != nil {
+	lines, err := tx.QueryContext(ctx, `SELECT s.id, s.transaction_id, s.amount FROM splits s
+		JOIN transactions t ON t.id=s.transaction_id WHERE t.currency=? AND t.fx_rate=''`, currency)
+	if err != nil {
+		return 0, err
+	}
+	splits := map[string][]row{}
+	for lines.Next() {
+		var s row
+		var parent string
+		if err := lines.Scan(&s.id, &parent, &s.amount); err != nil {
+			lines.Close()
 			return 0, err
 		}
+		splits[parent] = append(splits[parent], s)
+	}
+	lines.Close()
+	if err := lines.Err(); err != nil {
+		return 0, err
+	}
+	for _, t := range affected {
+		on, ok := pick(rates, t.date)
 		if !ok {
 			return 0, fmt.Errorf("transaction %s: no %s rate on file", t.id, currency)
 		}
-		ref, err := money.Convert(money.New(t.amount, currency), rate, l.reference)
+		ref, err := money.Convert(money.New(t.amount, currency), on.rate, l.reference)
 		if err != nil {
-			return 0, fmt.Errorf("transaction %s at %s: %w", t.id, rate, err)
+			return 0, fmt.Errorf("transaction %s at %s: %w", t.id, on.rate, err)
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE transactions SET base_amount=? WHERE id=?`, ref.Minor, t.id); err != nil {
 			return 0, err
 		}
-		lines, err := tx.QueryContext(ctx, `SELECT id, amount FROM splits WHERE transaction_id=?`, t.id)
-		if err != nil {
-			return 0, err
-		}
-		var splits []row
-		for lines.Next() {
-			var s row
-			if err := lines.Scan(&s.id, &s.amount); err != nil {
-				lines.Close()
-				return 0, err
-			}
-			splits = append(splits, s)
-		}
-		lines.Close()
-		if err := lines.Err(); err != nil {
-			return 0, err
-		}
-		for _, s := range splits {
-			ref, err := money.Convert(money.New(s.amount, currency), rate, l.reference)
+		for _, s := range splits[t.id] {
+			ref, err := money.Convert(money.New(s.amount, currency), on.rate, l.reference)
 			if err != nil {
-				return 0, fmt.Errorf("split %s at %s: %w", s.id, rate, err)
+				return 0, fmt.Errorf("split %s at %s: %w", s.id, on.rate, err)
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE splits SET base_amount=? WHERE id=?`, ref.Minor, s.id); err != nil {
 				return 0, err
@@ -253,6 +270,47 @@ func (l *Ledger) rederive(ctx context.Context, tx *sql.Tx, currency string) (int
 		}
 	}
 	return len(affected), nil
+}
+
+// rateRow is one row of the table as read for resolving in Go.
+type rateRow struct {
+	date   string
+	rate   money.Rate
+	source string
+}
+
+// ratesOf reads every rate on file for a currency, oldest first, drained
+// before returning.
+func (l *Ledger) ratesOf(ctx context.Context, q querier, currency string) ([]rateRow, error) {
+	rows, err := q.QueryContext(ctx, `SELECT date, rate, source FROM fx_rates WHERE currency=? ORDER BY date`, currency)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []rateRow
+	for rows.Next() {
+		var r rateRow
+		var raw string
+		if err := rows.Scan(&r.date, &raw, &r.source); err != nil {
+			return nil, err
+		}
+		r.rate = money.Rate(raw)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// pick is the rule rateOn applies, over rows already read oldest first: the
+// latest on or before the date, else the earliest, else nothing.
+func pick(rates []rateRow, date string) (rateRow, bool) {
+	if len(rates) == 0 {
+		return rateRow{}, false
+	}
+	i := sort.Search(len(rates), func(i int) bool { return rates[i].date > date })
+	if i == 0 {
+		return rates[0], true
+	}
+	return rates[i-1], true
 }
 
 // RateOn is the rate to read a currency at on a date: the latest one filed on
@@ -263,9 +321,10 @@ func (l *Ledger) RateOn(ctx context.Context, currency, date string) (money.Rate,
 	return l.rateOn(ctx, l.db, currency, date)
 }
 
-// querier is what rateOn needs: the ledger, or a transaction on it.
+// querier is what a lookup needs: the ledger, or a transaction on it.
 type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
 // rateOn is RateOn against q, so a lookup can run inside a transaction on
@@ -362,64 +421,63 @@ func ToReference(minor int64, currency, reference string, rates map[string]money
 	return out.Minor, true
 }
 
-// A first run has no rates at all, so an account in another currency is left
-// out of every figure until someone types one in. These are a starting point,
-// not a feed: nothing here reaches the network, the numbers were taken on
-// referenceDate, and the table shows that date so their age is plain. Correct
-// them with: omabudget rate set <currency> <rate>
-const referenceDate = "2026-01-01"
-
-// referenceRates is what one unit of each was worth in euro on referenceDate.
-var referenceRates = map[string]string{
-	"EUR": "1",
-	"USD": "0.92",
-	"PLN": "0.235",
-}
-
-// SeedRates files a starting rate for each quoted currency other than the
-// reference, and only while the table is empty. A rate that has been entered is
-// never fought, and one that has been removed never comes back. It reports
-// how many it filed.
-func (l *Ledger) SeedRates(ctx context.Context) (int, error) {
+// SeedFor files the shipped starting rate for a currency the first time it
+// comes into use, dated the day the quote was published, and reports whether
+// it did. Seeding is closed for a currency once it has a marker or any rate
+// on file, whoever filed it, and the marker outlives the row. So a rate that
+// was typed and then removed does not come back as the shipped one: a
+// deleted rate never returns, whatever its source. A currency the quote does
+// not carry, or a reference it does not quote, gets nothing and no marker.
+func (l *Ledger) SeedFor(ctx context.Context, currency string) (bool, error) {
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if l.seed == nil || len(currency) != 3 || currency == l.reference {
+		return false, nil
+	}
+	if _, err := l.db.Meta(ctx, db.MetaRateSeeded(currency)); err == nil {
+		return false, nil
+	} else if !errors.Is(err, db.ErrNotFound) {
+		return false, err
+	}
 	var have int
-	if err := l.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM fx_rates`).Scan(&have); err != nil {
-		return 0, err
+	if err := l.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM fx_rates WHERE currency=?`, currency).Scan(&have); err != nil {
+		return false, err
 	}
 	if have > 0 {
-		return 0, nil
+		return false, nil
 	}
-	inEuro, ok := new(big.Rat).SetString(referenceRates[l.reference])
-	if !ok {
-		// A reference outside the quoted set has nothing to convert through,
-		// which is honest: no rate beats a guessed one.
-		return 0, nil
+	if _, quoted := l.seed.Rates[l.reference]; !quoted && l.reference != l.seed.Base {
+		return false, nil
 	}
-	filed := 0
-	currencies := make([]string, 0, len(referenceRates))
-	for c := range referenceRates {
-		currencies = append(currencies, c)
+	if _, quoted := l.seed.Rates[currency]; !quoted && currency != l.seed.Base {
+		return false, nil
 	}
-	slices.Sort(currencies)
-	for _, currency := range currencies {
-		if currency == l.reference {
-			continue
-		}
-		ref, ok := new(big.Rat).SetString(referenceRates[currency])
-		if !ok {
-			continue
-		}
-		rate := new(big.Rat).Quo(ref, inEuro)
-		if _, err := l.db.ExecContext(ctx,
-			`INSERT OR IGNORE INTO fx_rates (date,currency,rate,source) VALUES (?,?,?,?)`,
-			referenceDate, currency, string(money.RateOf(rate)), SourceSeed); err != nil {
-			return filed, err
-		}
-		// The marker outlives the row, so a removed starting rate stays gone.
-		if _, err := l.db.ExecContext(ctx, `INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)`,
-			db.MetaRateSeeded(currency), referenceDate); err != nil {
-			return filed, err
-		}
-		filed++
+	rates, err := l.seed.Against(l.reference)
+	if err != nil {
+		return false, err
 	}
-	return filed, nil
+	tx, err := l.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	// Nothing follows the table in a currency with no rate, so there is
+	// nothing to re-derive.
+	if err := l.file(ctx, tx, currency, rates[currency], l.seed.Date, SourceSeed); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// file writes one rate, replacing that day's if it has one, and closes
+// seeding for the currency, so the shipped rate stays out of a currency that
+// has had a rate of any source.
+func (l *Ledger) file(ctx context.Context, tx *sql.Tx, currency string, rate money.Rate, date, source string) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO fx_rates (date,currency,rate,source) VALUES (?,?,?,?)
+		ON CONFLICT(date,currency) DO UPDATE SET rate=excluded.rate, source=excluded.source`,
+		date, currency, string(rate), source); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)`,
+		db.MetaRateSeeded(currency), date)
+	return err
 }

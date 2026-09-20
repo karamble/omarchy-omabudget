@@ -90,13 +90,6 @@ func run() error {
 	if v, err := ledgerDB.Version(ctx); err == nil {
 		logger.Info("ledger open", "path", ledgerDB.Path(), "schema", v)
 	}
-	// A first run starts from a dated set of rates rather than none at all,
-	// so an account in another currency counts from the beginning.
-	if n, err := ledger.SeedRates(ctx); err != nil {
-		logger.Warn("filing the starting rates", "err", err)
-	} else if n > 0 {
-		logger.Info("starting rates filed", "count", n, "base", cfg.BaseCurrency)
-	}
 	go postDueBills(ctx, ledger, logger)
 	go sweepRecycleBin(ctx, ledger, logger)
 

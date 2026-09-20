@@ -443,6 +443,9 @@ func (l *Ledger) SetBudget(ctx context.Context, categoryRef, periodKey string, p
 	if len(currency) != 3 {
 		return fmt.Errorf("currency %q must be a three-letter code", currency)
 	}
+	if _, err := l.SeedFor(ctx, currency); err != nil {
+		return err
+	}
 	if _, ok, err := l.RateOn(ctx, currency, ""); err != nil {
 		return err
 	} else if !ok {

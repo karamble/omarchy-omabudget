@@ -21,6 +21,22 @@ Item {
   readonly property string home: Quickshell.env("HOME") || "~"
   readonly property string dataDir: home + "/.config/omabudget"
   property string format: "journal"
+  // The settings carry the one record kept of the network: the last fetch.
+  property var settings: null
+
+  function reload() {
+    if (!app) return
+    app.query(["settings"], function (data, err) { if (!err) view.settings = data })
+  }
+  Connections {
+    target: view.app
+    function onChanged() { view.reload() }
+  }
+  function networkText() {
+    var f = view.settings ? view.settings.lastFetch : null
+    if (!f) return "Never used"
+    return "Last used " + String(f.at || "").slice(0, 10) + ", " + String(f.host || "") + ", for exchange rates"
+  }
 
   function today() { return Qt.formatDate(new Date(), "yyyy-MM-dd") }
   function defaultExport() { return view.home + "/Documents/omabudget-" + view.today() + (view.format === "csv" ? ".csv" : ".journal") }
@@ -29,6 +45,7 @@ Item {
   onAppChanged: {
     exportPath.text = view.defaultExport()
     backupPath.text = view.defaultBackup()
+    view.reload()
   }
   onFormatChanged: exportPath.text = view.defaultExport()
 
@@ -70,6 +87,7 @@ Item {
     font.pixelSize: Style.font.caption
     wrapMode: Text.WordWrap
   }
+  component PathField: TextField {
     foreground: view.fg
     accent: view.accent
     font.family: view.ff
@@ -105,7 +123,7 @@ Item {
       }
       Body {
         width: parent.width
-        text: "Everything lives in one SQLite file on this machine. No cloud, no tracking, no bank connection, no network at all: the daemon listens on the loopback address and never opens a connection outward."
+        text: "Everything lives in one SQLite file on this machine. No cloud, no tracking, no bank connection. The daemon listens on the loopback address and opens one connection outward only when you press Fetch now in Settings or run omabudget rate fetch: to the exchange rate source chosen there, and never on its own."
         color: view.dim
       }
 
@@ -130,6 +148,15 @@ Item {
             Body { text: view.dataDir + "/triggers.json"; font.pixelSize: Style.font.bodySmall }
             Note { width: parent.width; text: "Alert triggers, if you armed any." }
             Note { width: parent.width; topPadding: Style.space(6); text: "Keep the folder out of file sync: a database synced while open ends up corrupt. Take a backup or an export instead." }
+          }
+
+          TitledCard {
+
+            app: view.app
+            width: parent.width
+            title: "NETWORK"
+            Body { width: parent.width; text: view.networkText() }
+            Note { width: parent.width; text: "One connection, only when you press Fetch now in Settings or run omabudget rate fetch, to the exchange rate source chosen there. The whole list of rates is read, so the request says nothing about what you hold. Nothing else leaves this machine." }
           }
 
           TitledCard {

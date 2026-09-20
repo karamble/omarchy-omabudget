@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/karamble/omarchy-omabudget/db"
+	"github.com/karamble/omarchy-omabudget/feed"
 	"github.com/karamble/omarchy-omabudget/money"
 )
 
@@ -18,6 +19,8 @@ func newLedger(t *testing.T) *Ledger {
 }
 
 // newLedgerWith opens a ledger whose rates are quoted against reference.
+// Starting rates are off, so a test starts from an empty table unless it
+// asks for them with seeded.
 func newLedgerWith(t *testing.T, reference string) *Ledger {
 	t.Helper()
 	d, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "ledger.db"), db.Options{RateReference: reference})
@@ -27,6 +30,13 @@ func newLedgerWith(t *testing.T, reference string) *Ledger {
 	t.Cleanup(func() { d.Close() })
 	l := New(d)
 	l.now = func() time.Time { return time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC) }
+	l.seed = nil
+	return l
+}
+
+// seeded turns the shipped starting rates on for a test ledger.
+func seeded(l *Ledger) *Ledger {
+	l.seed = &feed.Builtin
 	return l
 }
 

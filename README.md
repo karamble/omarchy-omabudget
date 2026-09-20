@@ -45,11 +45,18 @@ as its own window.
   table; one entered with its own rate keeps it. The currency figures are
   shown in is a setting, `omabudget settings base-currency`, converted from
   the reference at today's rate, so it can change at any time and nothing
-  stored moves. A first run starts from a dated set for euro, dollar and
-  zloty, whichever of them is not the reference, so a foreign account counts
-  from the beginning. Nothing is ever fetched, so those three are a starting
-  point carrying the date they were taken; correct them with `omabudget rate
-  set`, and once the table has anything in it the starting set never returns.
+  stored moves. A currency gets a starting rate the first time it comes into
+  use, from a set shipped with the binary and dated the day it was
+  published, so a foreign account counts from the beginning; a rate that was
+  removed never comes back on its own. Current rates come from `omabudget
+  rate fetch`, or the Fetch now button in Settings: one request to the
+  source chosen there, the European Central Bank's own feed or a Frankfurter
+  instance, which is the only connection the app ever opens outward, and it
+  is made only when you ask. Every currency the source publishes is read, so
+  the request says nothing about what you hold; a rate you typed is never
+  overwritten; a batch that looks like a bad response is held for you to
+  accept row by row; and each rate shows where it came from. Bitcoin,
+  Decred, Litecoin and Ether are on neither source and stay hand entered.
 - **Budget**: a planned amount per category, or envelopes where money is
   assigned to pots first and rolls over by each category's behaviour, with
   goals that save toward a target by a month. Helpers copy the previous
@@ -131,6 +138,8 @@ the plugin's `bin/` folder:
     omabudget bills
     omabudget report spending
     omabudget rate set USD 0.92
+    omabudget rate fetch
+    omabudget settings rate-source frankfurter -url http://192.168.1.20:8080/v1/latest
     omabudget arm accounts.low appears -reason "top it up before the rent"
     omabudget arm period.spent crosses -above 150000 -expires-in 720h
     omabudget export -o ~/Documents/ledger.journal

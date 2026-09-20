@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/karamble/omarchy-omabudget/db"
+	"github.com/karamble/omarchy-omabudget/feed"
 	"github.com/karamble/omarchy-omabudget/money"
 )
 
@@ -25,11 +26,14 @@ type Ledger struct {
 	// changes; showing figures in another currency is the caller's job.
 	reference string
 	now       func() time.Time
+	// seed is the quote a currency's starting rate is taken from when it
+	// first comes into use; nil files nothing.
+	seed *feed.Quote
 }
 
 // New wraps an open database.
 func New(d *db.DB) *Ledger {
-	return &Ledger{db: d, reference: d.RateReference(), now: time.Now}
+	return &Ledger{db: d, reference: d.RateReference(), now: time.Now, seed: &feed.Builtin}
 }
 
 // Reference reports the currency the rate table is quoted against.
@@ -114,6 +118,9 @@ func (l *Ledger) AddAccount(ctx context.Context, a Account) (Account, error) {
 		a.ID = newID()
 	}
 	a.Active = true
+	if _, err := l.SeedFor(ctx, a.Currency); err != nil {
+		return Account{}, err
+	}
 	ts := l.stamp()
 	_, err := l.db.ExecContext(ctx, `INSERT INTO accounts
 		(id,name,type,currency,opening_balance,opening_date,is_active,include_in_net_worth,
@@ -186,6 +193,11 @@ func (l *Ledger) UpdateAccount(ctx context.Context, a Account) (Account, error) 
 		}
 		if n > 0 {
 			return Account{}, errors.New("type and currency are fixed once an account has postings")
+		}
+	}
+	if a.Currency != cur.Currency {
+		if _, err := l.SeedFor(ctx, a.Currency); err != nil {
+			return Account{}, err
 		}
 	}
 	_, err = l.db.ExecContext(ctx, `UPDATE accounts SET name=?,type=?,currency=?,opening_balance=?,opening_date=?,
@@ -471,6 +483,9 @@ func (l *Ledger) prepare(ctx context.Context, t *Transaction) error {
 		return fmt.Errorf("unknown transaction kind %q", t.Kind)
 	}
 
+	if _, err := l.SeedFor(ctx, t.Currency); err != nil {
+		return err
+	}
 	rate, err := l.freezeBase(ctx, t)
 	if err != nil {
 		return err

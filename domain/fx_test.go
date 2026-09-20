@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/karamble/omarchy-omabudget/db"
+	"github.com/karamble/omarchy-omabudget/feed"
 	"github.com/karamble/omarchy-omabudget/money"
 )
 
@@ -198,75 +199,170 @@ func TestStatisticsExclusion(t *testing.T) {
 	}
 }
 
-// TestSeedRates pins the arithmetic and the two ways it must stay out of the
-// way: a table with anything in it, and a base outside the reference set.
-func TestSeedRates(t *testing.T) {
+// TestSeedOnFirstUse: a currency gets the shipped rate the first time an
+// account is opened in it, dated the day the quote was published and marked
+// as seed, and then counts in every figure. A second account in it files
+// nothing more.
+func TestSeedOnFirstUse(t *testing.T) {
+	l := seeded(newLedger(t))
 	ctx := context.Background()
-
-	// Base EUR: the other two are filed at their euro values.
-	l := newLedger(t)
-	n, err := l.SeedRates(ctx)
-	if err != nil || n != 2 {
-		t.Fatalf("filed %d: %v", n, err)
-	}
-	want := map[string]string{"USD": "0.92", "PLN": "0.235"}
+	mustAccount(t, l, "Main", Checking, "EUR", 100000)
+	mustAccount(t, l, "Dollars", Checking, "USD", 50000)
 	list, err := l.Rates(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 {
+	if len(list) != 1 || list[0].Currency != "USD" || list[0].Date != feed.Builtin.Date ||
+		list[0].Rate != "0.87260035" || list[0].Source != SourceSeed {
 		t.Fatalf("%+v", list)
 	}
-	for _, r := range list {
-		if r.Date != referenceDate {
-			t.Errorf("%s is dated %s", r.Currency, r.Date)
-		}
-		if string(r.Rate) != want[r.Currency] {
-			t.Errorf("%s is %s, want %s", r.Currency, r.Rate, want[r.Currency])
-		}
-		if r.Source != SourceSeed {
-			t.Errorf("%s is from %q", r.Currency, r.Source)
-		}
-		if v, err := l.DB().Meta(ctx, db.MetaRateSeeded(r.Currency)); err != nil || v != referenceDate {
-			t.Errorf("%s marker = %q, %v", r.Currency, v, err)
-		}
+	if v, err := l.DB().Meta(ctx, db.MetaRateSeeded("USD")); err != nil || v != feed.Builtin.Date {
+		t.Errorf("marker = %q, %v", v, err)
 	}
-	// A typed rate over a seeded one takes the row over.
-	if _, err := l.SetRate(ctx, "USD", "0.93", referenceDate); err != nil {
+	// 500.00 USD at 0.87260035 is 436.30 EUR.
+	liquid, missing, err := l.Liquid(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := l.Rates(ctx, "USD"); len(list) != 1 || list[0].Source != SourceManual {
+	if liquid != 143630 || len(missing) != 0 {
+		t.Errorf("liquid %d missing %v", liquid, missing)
+	}
+	mustAccount(t, l, "More dollars", Savings, "USD", 0)
+	if list, _ := l.Rates(ctx, "USD"); len(list) != 1 {
+		t.Errorf("a second account filed again: %+v", list)
+	}
+	// A typed rate on the same day takes the row over.
+	if _, err := l.SetRate(ctx, "USD", "0.9", feed.Builtin.Date); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := l.Rates(ctx, "USD"); len(list) != 1 || list[0].Source != SourceManual || list[0].Rate != "0.9" {
+		t.Errorf("%+v", list)
+	}
+}
+
+// TestSeedAtFirstEntry: a currency that first appears on a transaction, a
+// plan or an account edit is seeded there, so the entry goes through at the
+// shipped rate instead of being refused.
+func TestSeedAtFirstEntry(t *testing.T) {
+	l := seeded(newLedger(t))
+	ctx := context.Background()
+	main := mustAccount(t, l, "Main", Checking, "EUR", 100000)
+	// 100.00 PLN at 1/4.3635, which is 0.22917383, is 22.92 EUR.
+	got, err := l.Add(ctx, Transaction{Kind: Expense, AccountID: main.ID, Amount: 10000, Currency: "PLN", CategoryID: "Fuel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.FXRate != "" || got.ReferenceAmount != -2292 {
+		t.Errorf("%+v", got)
+	}
+	if list, _ := l.Rates(ctx, "PLN"); len(list) != 1 || list[0].Source != SourceSeed {
 		t.Errorf("%+v", list)
 	}
 
-	// A second run leaves the table alone, and so does a removed rate.
-	if n, err := l.SeedRates(ctx); err != nil || n != 0 {
-		t.Fatalf("a second run filed %d: %v", n, err)
-	}
-
-	// Reference PLN: the same quotes, crossed. 1 EUR is 1/0.235 zloty.
-	zl := newLedgerWith(t, "PLN")
-	if _, err := zl.SeedRates(ctx); err != nil {
+	if err := l.SetBudget(ctx, "Groceries", "2026-09", 10000, "GBP"); err != nil {
 		t.Fatal(err)
 	}
-	crossed := map[string]string{}
-	all, _ := zl.Rates(ctx, "")
-	for _, r := range all {
-		crossed[r.Currency] = string(r.Rate)
-	}
-	if crossed["EUR"] != "4.2553191" || crossed["USD"] != "3.9148936" {
-		t.Fatalf("%+v", crossed)
+	if list, _ := l.Rates(ctx, "GBP"); len(list) != 1 || list[0].Rate != "1.1644155" {
+		t.Errorf("%+v", list)
 	}
 
-	// A reference nothing is quoted against gets nothing, which beats a guess.
-	yen := newLedgerWith(t, "JPY")
-	if n, err := yen.SeedRates(ctx); err != nil || n != 0 {
-		t.Fatalf("filed %d for an unquoted base: %v", n, err)
+	spare := mustAccount(t, l, "Spare", Savings, "EUR", 0)
+	spare.Currency = "CHF"
+	if _, err := l.UpdateAccount(ctx, spare); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := l.Rates(ctx, "CHF"); len(list) != 1 || list[0].Source != SourceSeed {
+		t.Errorf("%+v", list)
+	}
+	// A rule is a currency in use too.
+	if _, err := l.AddRule(ctx, Rule{Name: "Rent", Frequency: "monthly", StartDate: "2026-09-01",
+		Template: Template{Kind: Expense, AccountID: main.ID, Amount: 100000, Currency: "NOK", CategoryID: "Rent"}}); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := l.Rates(ctx, "NOK"); len(list) != 1 {
+		t.Errorf("%+v", list)
+	}
+}
+
+// TestSeedIsClosedByAnyRate: a currency that has had a rate, whoever filed
+// it, is never seeded, even after that rate is removed. The marker is what
+// says so, and a marker on its own, as the migration leaves, closes it too.
+func TestSeedIsClosedByAnyRate(t *testing.T) {
+	l := seeded(newLedger(t))
+	ctx := context.Background()
+	if _, err := l.SetRate(ctx, "GBP", "1.2", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.RemoveRate(ctx, "GBP", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	mustAccount(t, l, "Pounds", Checking, "GBP", 0)
+	if list, _ := l.Rates(ctx, "GBP"); len(list) != 0 {
+		t.Errorf("the shipped rate came back after a typed one was removed: %+v", list)
+	}
+	if _, err := l.db.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)`, db.MetaRateSeeded("CHF"), "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := l.SeedFor(ctx, "CHF"); err != nil || ok {
+		t.Errorf("seeded past a marker: %v %v", ok, err)
+	}
+	// A rate typed first, then the currency used: the typed one stands.
+	if _, err := l.SetRate(ctx, "USD", "0.9", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	mustAccount(t, l, "Dollars", Checking, "USD", 0)
+	if list, _ := l.Rates(ctx, "USD"); len(list) != 1 || list[0].Rate != "0.9" {
+		t.Errorf("%+v", list)
+	}
+}
+
+// TestSeedOnlyWhatIsQuoted: a currency the quote does not carry gets nothing
+// and no marker, so a later quote could still offer it; the reference is
+// never seeded; a reference the quote does not carry seeds nothing at all;
+// and another reference is crossed through the base.
+func TestSeedOnlyWhatIsQuoted(t *testing.T) {
+	ctx := context.Background()
+	l := seeded(newLedger(t))
+	mustAccount(t, l, "Coins", Cash, "BTC", 0)
+	if list, _ := l.Rates(ctx, ""); len(list) != 0 {
+		t.Errorf("%+v", list)
+	}
+	if _, err := l.DB().Meta(ctx, db.MetaRateSeeded("BTC")); !errors.Is(err, db.ErrNotFound) {
+		t.Errorf("an unquoted currency got a marker: %v", err)
+	}
+	if ok, err := l.SeedFor(ctx, "EUR"); err != nil || ok {
+		t.Errorf("the reference was seeded: %v %v", ok, err)
+	}
+
+	yen := seeded(newLedgerWith(t, "JPY"))
+	mustAccount(t, yen, "Euros", Checking, "EUR", 0)
+	mustAccount(t, yen, "Dollars", Checking, "USD", 0)
+	got := map[string]money.Rate{}
+	all, _ := yen.Rates(ctx, "")
+	for _, r := range all {
+		got[r.Currency] = r.Rate
+	}
+	if got["EUR"] != "180.94" || got["USD"] != "157.88831" {
+		t.Errorf("%v", got)
+	}
+
+	coins := seeded(newLedgerWith(t, "BTC"))
+	mustAccount(t, coins, "Dollars", Checking, "USD", 0)
+	if list, _ := coins.Rates(ctx, ""); len(list) != 0 {
+		t.Errorf("a reference nothing is quoted against was seeded: %+v", list)
+	}
+
+	// With no quote at all nothing is filed, which is how the other tests
+	// start from an empty table.
+	off := newLedger(t)
+	mustAccount(t, off, "Dollars", Checking, "USD", 0)
+	if list, _ := off.Rates(ctx, ""); len(list) != 0 {
+		t.Errorf("%+v", list)
 	}
 }
 
 // TestReferenceIsFixed: the reference the rates are quoted against is read
-// from the ledger and is what SetRate, RateOn and SeedRates key off; no
+// from the ledger and is what SetRate, RateOn and SeedFor key off; no
 // setting on the ledger can move it.
 func TestReferenceIsFixed(t *testing.T) {
 	l := newLedger(t)

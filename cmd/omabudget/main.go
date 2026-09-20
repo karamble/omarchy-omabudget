@@ -52,7 +52,12 @@ planning:
   category behaviour <category> monthly|rollover|goal|untracked
   category goal <category> <target> <YYYY-MM>
   settings            show; settings base-currency <CODE>, model limits|envelope, period-start <day>, large-amount <amount>
+                      rate-source <id> [-url URL] chooses where rate fetch reads
   rate                exchange rates on file; rate set <currency> <rate> [-date], rate remove <currency> <date>
+  rate fetch          read the chosen source once and file what it quotes; -source, -url for this press only
+  rate accept <currency> <rate> -date D -source S
+                      file a rate the fetch held
+  rate sources        where a fetch can read from, and who answers
   payees              who money went to; payee rename|category|alias|unalias|merge|remove
 
   report spending     categories ranked against the period before; -period, or -from and -to
