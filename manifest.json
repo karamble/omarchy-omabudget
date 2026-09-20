@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "karamble.omabudget",
   "name": "OMABUDGET",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "karamble",
   "license": "ISC",
   "description": "Local-first personal finance: accounts, a ledger, budgets and bills, stored on this machine and nowhere else",
