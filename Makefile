@@ -33,11 +33,35 @@ PLUGIN_DIRS := views charts components
 # preview.png is generated, so it is copied only when it exists.
 PREVIEW := $(wildcard preview.png)
 
-.PHONY: all build test validate verify clean install install-check
+.PHONY: all build test validate verify toolchain clean install install-check lint
 
 all: build
 
-build: verify
+# Building from source needs Go, and the most common way to miss it on Omarchy
+# is having it under mise without the shell activated. Say which case it is.
+toolchain:
+	@command -v $(GO) >/dev/null 2>&1 && exit 0; \
+	echo "omabudget builds from source and the Go toolchain is not on PATH."; \
+	echo; \
+	if command -v mise >/dev/null 2>&1 && mise which go >/dev/null 2>&1; then \
+		echo "  mise has Go, but this shell cannot see it. Open a new terminal and"; \
+		echo "  press Build again, or build against it directly:"; \
+		echo; \
+		echo "      make GO=$$(mise which go)"; \
+	elif command -v mise >/dev/null 2>&1; then \
+		echo "  Omarchy ships mise, so the shortest way is:"; \
+		echo; \
+		echo "      mise use -g go@latest"; \
+		echo; \
+		echo "  then open a new terminal and press Build again."; \
+	else \
+		echo "      sudo pacman -S go"; \
+	fi; \
+	echo; \
+	echo "Go $(shell sed -n 's/^go \([0-9.]*\)$$/\1/p' go.mod) or newer is needed."; \
+	exit 1
+
+build: toolchain verify
 	@$(INSTALL) -d bin
 	@for b in $(BINARIES); do \
 		echo "building bin/$$b"; \
@@ -80,3 +104,21 @@ verify:
 install-check: verify
 	@command -v $(GO) >/dev/null || { echo "go toolchain not found"; exit 1; }
 	@echo "toolchain ok, modules verified"
+
+# The qmllint and qmlformat on PATH may not be Qt 6's: some distributions ship
+# an unrelated binary of the same name that reports version 1.0 and fails on
+# `pragma ComponentBehavior: Bound` with no output at all. Prefer Qt's own.
+QMLLINT   := $(shell command -v qmllint6 2>/dev/null || echo /usr/lib/qt6/bin/qmllint)
+QMLFORMAT := $(shell command -v qmlformat6 2>/dev/null || echo /usr/lib/qt6/bin/qmlformat)
+SHELL_DIR := $(or $(OMARCHY_PATH),/usr/share/omarchy)/shell
+LINTROOT  := $(CURDIR)/.lintroot
+QMLFILES  := $(shell find . -name '*.qml' -not -path './.git/*' -not -path './.lintroot/*')
+
+lint:
+	@for f in $(QMLFILES); do $(QMLFORMAT) "$$f" >/dev/null || { echo "failed to parse $$f"; exit 1; }; done
+	@echo "qml: all files parse"
+	@# `import qs.Ui` resolves as <import path>/qs/Ui/qmldir, so the shell has
+	@# to be reachable under a directory named `qs`.
+	@mkdir -p $(LINTROOT) && ln -sfn $(SHELL_DIR) $(LINTROOT)/qs
+	$(QMLLINT) -I $(LINTROOT) $(QMLFILES)
+	@rm -rf $(LINTROOT)

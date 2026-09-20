@@ -21,3 +21,4 @@ triggers.json
 *.swp
 *~
 .DS_Store
+.lintroot/
