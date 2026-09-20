@@ -80,12 +80,12 @@ func run() error {
 
 	srv := api.NewServer(cfg, logger, version)
 
-	ledgerDB, err := db.Open(ctx, config.DatabasePath())
+	ledgerDB, err := db.Open(ctx, config.DatabasePath(), db.Options{RateReference: cfg.BaseCurrency})
 	if err != nil {
 		return fmt.Errorf("opening the ledger: %w", err)
 	}
 	defer ledgerDB.Close()
-	ledger := domain.New(ledgerDB, cfg.BaseCurrency)
+	ledger := domain.New(ledgerDB)
 	srv.SetLedger(ledger)
 	if v, err := ledgerDB.Version(ctx); err == nil {
 		logger.Info("ledger open", "path", ledgerDB.Path(), "schema", v)

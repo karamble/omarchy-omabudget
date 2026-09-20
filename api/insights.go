@@ -75,7 +75,9 @@ func insights(out dashboardOut) []Insight {
 	dueCount, overdue := 0, 0
 	for _, b := range out.Bills {
 		// A rule carries its amount unsigned; the kind says which way it goes.
-		if b.Kind != domain.Expense {
+		// The sum is in the base, like the liquid figure it is held against,
+		// so a bill whose currency has no rate cannot be counted.
+		if b.Kind != domain.Expense || b.BaseAmount == 0 {
 			continue
 		}
 		if b.Overdue {
@@ -83,7 +85,7 @@ func insights(out dashboardOut) []Insight {
 		}
 		if b.Overdue || b.DaysUntil <= 7 {
 			dueCount++
-			dueTotal += b.Amount
+			dueTotal += b.BaseAmount
 		}
 	}
 	switch {

@@ -43,7 +43,7 @@ func TestEnvelopesAndRollover(t *testing.T) {
 		id      string
 		planned int64
 	}{{groceries.ID, 30000}, {fuel.ID, 10000}, {holiday.ID, 20000}} {
-		if err := l.SetBudget(ctx, b.id, "2026-08", b.planned); err != nil {
+		if err := l.SetBudget(ctx, b.id, "2026-08", b.planned, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -97,7 +97,7 @@ func TestEnvelopesAndRollover(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	// Assigning zero keeps a line that carries a rollover.
-	if err := l.SetBudget(ctx, fuel.ID, "2026-09", 0); err != nil {
+	if err := l.SetBudget(ctx, fuel.ID, "2026-09", 0, ""); err != nil {
 		t.Fatal(err)
 	}
 	sep, _ = l.Envelopes(ctx, "2026-09", "2026-09-01", "2026-09-30")
@@ -141,5 +141,56 @@ func TestEnvelopesAndRollover(t *testing.T) {
 	}
 	if _, err := l.SetCategoryGoal(ctx, "Primary salary", 5000, "2026-12"); err == nil {
 		t.Fatal("a goal on income was accepted")
+	}
+}
+
+// TestRolloverCarriesReference: a pot assigned in another currency is read at
+// today's rate, so the carry, the goal and the accrual line up with spending
+// in the reference, and the row keeps what was typed.
+func TestRolloverCarriesReference(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+	a := mustAccount(t, l, "Main", Checking, "EUR", 300000)
+	holiday := mustCategory(t, l, "Accommodation")
+	if _, err := l.SetRate(ctx, "PLN", "0.25", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	// 1,200 EUR by December; 400 PLN assigned in August reads as 100 EUR.
+	if _, err := l.SetCategoryGoal(ctx, holiday.ID, 120000, "2026-12"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.SetBudget(ctx, holiday.ID, "2026-08", 40000, "PLN"); err != nil {
+		t.Fatal(err)
+	}
+	spend(t, l, a, "Accommodation", "2026-08-10", 4000)
+
+	aug, err := l.Envelopes(ctx, "2026-08", "2026-08-01", "2026-08-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aug.Items) != 1 || aug.Items[0].Assigned != 10000 || aug.Items[0].Available != 6000 || aug.Held != 6000 {
+		t.Fatalf("%+v", aug)
+	}
+	// 1,140 still to find over five periods.
+	if aug.Items[0].Accrual != 22800 {
+		t.Fatalf("accrual %d, want 22800", aug.Items[0].Accrual)
+	}
+	if _, err := l.Rollover(ctx, "2026-08", "2026-08-01", "2026-08-31", "2026-09"); err != nil {
+		t.Fatal(err)
+	}
+	sep, err := l.Envelopes(ctx, "2026-09", "2026-09-01", "2026-09-30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sep.Items) != 1 || sep.Items[0].RolloverIn != 6000 || sep.Items[0].Assigned != 0 || sep.Items[0].Available != 6000 {
+		t.Fatalf("%+v", sep)
+	}
+	var planned, rolled int64
+	var currency string
+	if err := l.db.QueryRow(`SELECT planned, currency, rollover_in FROM budgets WHERE period='2026-08'`).Scan(&planned, &currency, &rolled); err != nil {
+		t.Fatal(err)
+	}
+	if planned != 40000 || currency != "PLN" || rolled != 0 {
+		t.Fatalf("august row holds %d %s carrying %d", planned, currency, rolled)
 	}
 }

@@ -22,8 +22,10 @@ func (l *Ledger) Get(ctx context.Context, id string) (Transaction, error) {
 
 // Update rewrites a transaction from t, whose id names the row. Callers start
 // from Get and change what they need: every field is written back and the
-// split lines and tags are replaced. The creation time and the rate frozen at
-// entry stay, so an edited amount converts at the original rate.
+// split lines and tags are replaced. The creation time stays, and so does a
+// rate the row carries, so an edited amount converts at the original rate;
+// a row following the table keeps following it, at its new date if that
+// moved.
 func (l *Ledger) Update(ctx context.Context, t Transaction) (Transaction, error) {
 	cur, err := l.Get(ctx, t.ID)
 	if err != nil {
@@ -53,7 +55,7 @@ func (l *Ledger) Update(ctx context.Context, t Transaction) (Transaction, error)
 	_, err = tx.ExecContext(ctx, `UPDATE transactions SET kind=?,date=?,amount=?,currency=?,fx_rate=?,base_amount=?,
 		account_id=?,counter_account_id=?,counter_amount=?,category_id=?,payee_id=?,description=?,notes=?,
 		status=?,modified_at=? WHERE id=?`,
-		t.Kind, t.Date, t.Amount, t.Currency, string(t.FXRate), t.BaseAmount, t.AccountID,
+		t.Kind, t.Date, t.Amount, t.Currency, string(t.FXRate), t.ReferenceAmount, t.AccountID,
 		nullIf(t.CounterAccountID), t.CounterAmount, nullIf(t.CategoryID), nullIf(t.PayeeID),
 		t.Description, t.Notes, t.Status, t.ModifiedAt, t.ID)
 	if err != nil {
@@ -104,7 +106,7 @@ func (l *Ledger) attach(ctx context.Context, list []Transaction) error {
 		for rows.Next() {
 			var s Split
 			var tid string
-			if err := rows.Scan(&s.ID, &tid, &s.CategoryID, &s.Amount, &s.BaseAmount, &s.Note); err != nil {
+			if err := rows.Scan(&s.ID, &tid, &s.CategoryID, &s.Amount, &s.ReferenceAmount, &s.Note); err != nil {
 				rows.Close()
 				return err
 			}

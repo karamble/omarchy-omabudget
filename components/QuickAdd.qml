@@ -53,11 +53,11 @@ Overlay {
   onAppChanged: card.applyDefaults()
   onSuggestedAccountIdChanged: card.applyDefaults()
 
-  readonly property string baseCurrency:
-    app && app.snap && app.snap.baseCurrency ? String(app.snap.baseCurrency) : ""
+  // The currency figures are kept in and rates are quoted against.
+  readonly property string reference: app ? app.rateReference : ""
   readonly property string accountCurrency: {
     var a = card.app ? card.app.accountOf(accountBox.value) : null
-    return a ? String(a.currency) : card.baseCurrency
+    return a ? String(a.currency) : card.reference
   }
   readonly property string toCurrency: {
     var a = card.app ? card.app.accountOf(toBox.value) : null
@@ -149,25 +149,25 @@ Overlay {
     font.letterSpacing: 1
   }
 
-  // What the amount becomes in the base currency, and at which rate. Shown
-  // only for an account in another currency, where the answer is not obvious
-  // and where a missing rate means the entry will be refused.
+  // What the amount becomes in the reference currency, and at which rate.
+  // Shown only for an account in another currency, where the answer is not
+  // obvious and where a missing rate means the entry will be refused.
   component CurrencyNote: Text {
     readonly property var known: card.effectiveRate
-    visible: card.accountCurrency !== "" && card.baseCurrency !== ""
-             && card.accountCurrency !== card.baseCurrency
+    visible: card.accountCurrency !== "" && card.reference !== ""
+             && card.accountCurrency !== card.reference
     text: {
       if (!known)
-        return "no " + card.accountCurrency + " to " + card.baseCurrency
+        return "no " + card.accountCurrency + " to " + card.reference
              + " rate on file for " + card.entryDate + ": the entry will be refused until one is added"
       var at = "at " + String(known.rate) + (known.date ? " (" + String(known.date) + ")" : "")
       var v = card.app ? card.app.evaluate(amountField.text) : NaN
       if (!isFinite(v)) return at
-      var d = card.app.decimalsFor(card.baseCurrency)
+      var d = card.app.decimalsFor(card.reference)
       var conv = v * Number(known.rate)
       var pow = Math.pow(10, d)
       var rounded = (conv < 0 ? -1 : 1) * Math.round(Math.abs(conv) * pow) / pow
-      return "= " + rounded.toFixed(d) + " " + card.baseCurrency + " " + at
+      return "= " + rounded.toFixed(d) + " " + card.reference + " " + at
     }
     color: known ? card.dim : (card.app ? card.app.urgent : card.fg)
     font.family: card.ff

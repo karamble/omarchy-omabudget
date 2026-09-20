@@ -21,13 +21,41 @@ import (
 // DB is the open ledger.
 type DB struct {
 	*sql.DB
-	path string
+	path      string
+	opts      Options
+	reference string
+}
+
+// Options is what a migration needs from outside the ledger.
+type Options struct {
+	// RateReference is the currency every exchange rate is quoted against. It
+	// is written into the ledger the first time it is brought to version 2
+	// and never read from here again: the ledger's own record wins, so a
+	// backup restored under another configuration keeps its rates meaningful.
+	RateReference string
 }
 
 // Open creates the file if needed, at mode 0600 before SQLite ever writes to
 // it, then opens it with the pragmas a single-user ledger wants and applies
 // any migrations that have not run yet.
-func Open(ctx context.Context, path string) (*DB, error) {
+func Open(ctx context.Context, path string, opts Options) (*DB, error) {
+	d, err := connect(path, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.migrate(ctx); err != nil {
+		d.Close()
+		return nil, err
+	}
+	if d.reference, err = d.Meta(ctx, MetaRateReference); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("reading the rate reference: %w", err)
+	}
+	return d, nil
+}
+
+// connect creates and opens the file without touching its schema.
+func connect(path string, opts Options) (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
 	}
@@ -58,17 +86,29 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	// One writer. SQLite serialises writes anyway; letting database/sql open
 	// more connections only turns that into busy errors.
 	sqldb.SetMaxOpenConns(1)
-
-	d := &DB{DB: sqldb, path: path}
-	if err := d.migrate(ctx); err != nil {
-		sqldb.Close()
-		return nil, err
-	}
-	return d, nil
+	return &DB{DB: sqldb, path: path, opts: opts}, nil
 }
 
 // Path reports where the ledger lives.
 func (d *DB) Path() string { return d.path }
+
+// RateReference reports the currency the ledger's exchange rates are quoted
+// against, as recorded in the ledger itself.
+func (d *DB) RateReference() string { return d.reference }
+
+// MetaRateReference is the meta key the rate reference is kept under.
+const MetaRateReference = "rate_reference"
+
+// Meta reads one value from the meta table; a key that is not there is
+// ErrNotFound.
+func (d *DB) Meta(ctx context.Context, key string) (string, error) {
+	var value string
+	err := d.QueryRowContext(ctx, `SELECT value FROM meta WHERE key=?`, key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("meta %s: %w", key, ErrNotFound)
+	}
+	return value, err
+}
 
 // Version reports the schema version the ledger is at.
 func (d *DB) Version(ctx context.Context) (int, error) {
@@ -80,11 +120,24 @@ func (d *DB) Version(ctx context.Context) (int, error) {
 	return int(v.Int64), nil
 }
 
+// ErrSchemaTooNew is returned when the ledger was written by a newer build
+// than this one. An older binary could read it, but not without misreading
+// whatever the newer schema added.
+var ErrSchemaTooNew = errors.New("ledger schema is newer than this build")
+
 // migrate applies every migration above the recorded version, each in its own
 // transaction, so a failure leaves the ledger at a known version rather than
-// half way through one.
+// half way through one. A ledger already past the newest migration is refused
+// rather than opened.
 func (d *DB) migrate(ctx context.Context) error {
+	return d.migrateTo(ctx, migrations[len(migrations)-1].version)
+}
+
+// migrateTo applies the migrations up to and including version, which is
+// how a test builds the ledger an older build would have left behind.
+func (d *DB) migrateTo(ctx context.Context, version int) error {
 	if _, err := d.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+
 		version    INTEGER PRIMARY KEY,
 		applied_at TEXT NOT NULL
 	)`); err != nil {
@@ -94,8 +147,11 @@ func (d *DB) migrate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if newest := migrations[len(migrations)-1].version; current > newest {
+		return fmt.Errorf("%w: version %d, this build knows %d", ErrSchemaTooNew, current, newest)
+	}
 	for _, m := range migrations {
-		if m.version <= current {
+		if m.version <= current || m.version > version {
 			continue
 		}
 		if err := d.apply(ctx, m); err != nil {
@@ -105,7 +161,14 @@ func (d *DB) migrate(ctx context.Context) error {
 	return nil
 }
 
+// apply runs one migration: pre on the bare connection, then the statements,
+// after and the version stamp in one transaction.
 func (d *DB) apply(ctx context.Context, m migration) (err error) {
+	if m.pre != nil {
+		if err := m.pre(ctx, d); err != nil {
+			return err
+		}
+	}
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -121,7 +184,7 @@ func (d *DB) apply(ctx context.Context, m migration) (err error) {
 		}
 	}
 	if m.after != nil {
-		if err = m.after(ctx, tx); err != nil {
+		if err = m.after(ctx, tx, d.opts); err != nil {
 			return err
 		}
 	}

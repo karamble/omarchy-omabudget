@@ -21,7 +21,8 @@ as its own window.
   `tag:weekly`, `payee:market`, `>50` and `<200` alongside the words. Mark a
   handful with Space to move them to a category, tag them or delete them in
   one go. The amount is labelled with the chosen account's currency and, when
-  that is not the base one, says what it will land as: `= 11.75 EUR at 0.235`.
+  that is not the one rates are quoted against, says what it will land as:
+  `= 11.75 EUR at 0.235`.
   A transfer between two currencies records what landed on both sides.
 - **Categories**: the spec's taxonomy is seeded on first run, from housing and
   food to transport, health and the pets, and is yours after that. Add a group
@@ -36,14 +37,19 @@ as its own window.
   one, say what it is usually booked to, give it another name it goes by, or
   fold two into one, which moves every transaction and keeps the old spelling
   as an alias so the next import lands on the right payee.
-- **Exchange rates**: a rate per currency per day. Balances, net worth, the
-  cash line and every headline figure convert at the rate on file instead of
-  leaving a foreign account out, and say so when no rate covers one. A first
-  run starts from a dated set for euro, dollar and zloty, whichever of them is
-  not your base, so a foreign account counts from the beginning. Nothing is
-  ever fetched, so those three are a starting point carrying the date they
-  were taken; correct them with `omabudget rate set`, and once the table has
-  anything in it the starting set never returns.
+- **Exchange rates**: a rate per currency per day, every one quoted against
+  a reference currency the ledger fixes when it is first opened. Balances,
+  net worth, the cash line and every headline figure convert at the rate on
+  file instead of leaving a foreign account out, and say so when no rate
+  covers one. Correcting a rate re-derives every transaction that follows the
+  table; one entered with its own rate keeps it. The currency figures are
+  shown in is a setting, `omabudget settings base-currency`, converted from
+  the reference at today's rate, so it can change at any time and nothing
+  stored moves. A first run starts from a dated set for euro, dollar and
+  zloty, whichever of them is not the reference, so a foreign account counts
+  from the beginning. Nothing is ever fetched, so those three are a starting
+  point carrying the date they were taken; correct them with `omabudget rate
+  set`, and once the table has anything in it the starting set never returns.
 - **Budget**: a planned amount per category, or envelopes where money is
   assigned to pots first and rolls over by each category's behaviour, with
   goals that save toward a target by a month. Helpers copy the previous
@@ -67,8 +73,8 @@ as its own window.
   already use reads the same figures and records a transaction.
 
 Every amount can be hidden with one key, for screen sharing. Money is kept as
-integer minor units, base amounts are frozen at entry, and nothing is ever
-stored as a float.
+integer minor units in the reference currency and shown in the one you
+choose, and nothing is ever stored as a float.
 
 ## The app
 

@@ -76,7 +76,7 @@ func TestUpdateRewritesAndKeepsCreation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Amount != -6000 || out.BaseAmount != -6000 || out.CategoryID != fuel.ID {
+	if out.Amount != -6000 || out.ReferenceAmount != -6000 || out.CategoryID != fuel.ID {
 		t.Fatalf("%+v", out)
 	}
 	if out.CreatedAt != added.CreatedAt || out.ModifiedAt == added.ModifiedAt {
@@ -152,8 +152,8 @@ func TestUpdateKeepsTheFrozenRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if added.BaseAmount != -900 {
-		t.Fatalf("base %d", added.BaseAmount)
+	if added.ReferenceAmount != -900 {
+		t.Fatalf("base %d", added.ReferenceAmount)
 	}
 	edited := added
 	edited.Amount = 2000
@@ -162,16 +162,16 @@ func TestUpdateKeepsTheFrozenRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.FXRate != "0.9" || out.BaseAmount != -1800 {
-		t.Fatalf("rate %s base %d", out.FXRate, out.BaseAmount)
+	if out.FXRate != "0.9" || out.ReferenceAmount != -1800 {
+		t.Fatalf("rate %s base %d", out.FXRate, out.ReferenceAmount)
 	}
 	edited.FXRate = "0.5"
 	out, err = l.Update(ctx, edited)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.BaseAmount != -1000 {
-		t.Fatalf("base %d", out.BaseAmount)
+	if out.ReferenceAmount != -1000 {
+		t.Fatalf("base %d", out.ReferenceAmount)
 	}
 }
 

@@ -164,10 +164,13 @@ type healthResponse struct {
 	Version      string `json:"version"`
 	Uptime       string `json:"uptime"`
 	BaseCurrency string `json:"baseCurrency"`
-	Model        string `json:"model"`
-	Monitoring   bool   `json:"monitoring"`
-	MCPEnabled   bool   `json:"mcpEnabled"`
-	Armed        int    `json:"armed"`
+	// RateReference is what the ledger keeps its figures in and quotes
+	// every rate against; empty until the ledger is open.
+	RateReference string `json:"rateReference,omitempty"`
+	Model         string `json:"model"`
+	Monitoring    bool   `json:"monitoring"`
+	MCPEnabled    bool   `json:"mcpEnabled"`
+	Armed         int    `json:"armed"`
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -176,15 +179,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if e := s.alertEngine(); e != nil {
 		armed = len(e.List())
 	}
+	reference := ""
+	if l := s.Ledger(); l != nil {
+		reference = l.Reference()
+	}
 	writeJSON(w, s.logger, http.StatusOK, healthResponse{
-		Status:       "ok",
-		Version:      s.version,
-		Uptime:       time.Since(s.started).Round(time.Second).String(),
-		BaseCurrency: cfg.BaseCurrency,
-		Model:        string(cfg.Model),
-		Monitoring:   cfg.MonitoringOn(),
-		MCPEnabled:   cfg.MCPOn(),
-		Armed:        armed,
+		Status:        "ok",
+		Version:       s.version,
+		Uptime:        time.Since(s.started).Round(time.Second).String(),
+		BaseCurrency:  cfg.BaseCurrency,
+		RateReference: reference,
+		Model:         string(cfg.Model),
+		Monitoring:    cfg.MonitoringOn(),
+		MCPEnabled:    cfg.MCPOn(),
+		Armed:         armed,
 	})
 }
 

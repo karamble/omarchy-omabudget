@@ -45,12 +45,11 @@ BarWidget {
     return v.toFixed(d)
   }
 
+  // Minor-unit digits per currency, served with the dashboard; two until then.
   function decimalsFor(c) {
-    switch (String(c || "").toUpperCase()) {
-    case "JPY": case "KRW": case "HUF": case "ISK": return 0
-    case "BTC": case "DCR": case "LTC": return 8
-    }
-    return 2
+    var table = snap && snap.decimals ? snap.decimals : null
+    var d = table ? table[String(c || "").toUpperCase()] : undefined
+    return d !== undefined && d !== null ? Number(d) : 2
   }
 
   implicitWidth: row.implicitWidth

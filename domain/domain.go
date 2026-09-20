@@ -19,18 +19,21 @@ import (
 
 // Ledger is the domain over one open database.
 type Ledger struct {
-	db   *db.DB
-	base string // base currency, spec section 8
-	now  func() time.Time
+	db *db.DB
+	// reference is the currency every rate is quoted against and every
+	// figure is kept in. It is read from the ledger at open and never
+	// changes; showing figures in another currency is the caller's job.
+	reference string
+	now       func() time.Time
 }
 
-// New wraps an open database. base is the household's base currency.
-func New(d *db.DB, base string) *Ledger {
-	return &Ledger{db: d, base: strings.ToUpper(base), now: time.Now}
+// New wraps an open database.
+func New(d *db.DB) *Ledger {
+	return &Ledger{db: d, reference: d.RateReference(), now: time.Now}
 }
 
-// Base reports the base currency.
-func (l *Ledger) Base() string { return l.base }
+// Reference reports the currency the rate table is quoted against.
+func (l *Ledger) Reference() string { return l.reference }
 
 // DB exposes the database for maintenance such as backups.
 func (l *Ledger) DB() *db.DB { return l.db }
@@ -233,6 +236,8 @@ type Category struct {
 	ParentName string `json:"parentName,omitempty"`
 
 	// A goal category saves toward GoalTarget by the month GoalDue, spec 5.3.
+	// The target is kept in the reference currency, like the pot it is
+	// measured against.
 	GoalTarget int64  `json:"goalTarget,omitempty"`
 	GoalDue    string `json:"goalDue,omitempty"`
 
@@ -309,8 +314,10 @@ type Split struct {
 	ID         string `json:"id,omitempty"`
 	CategoryID string `json:"categoryId"`
 	Amount     int64  `json:"amount"`
-	BaseAmount int64  `json:"baseAmount"`
-	Note       string `json:"note,omitempty"`
+	// ReferenceAmount is the line in the reference currency, at the parent's
+	// rate.
+	ReferenceAmount int64  `json:"referenceAmount"`
+	Note            string `json:"note,omitempty"`
 }
 
 type Transaction struct {
@@ -319,10 +326,16 @@ type Transaction struct {
 	Date string `json:"date"`
 
 	// Amount is signed from the account's point of view: negative leaves it.
-	Amount     int64      `json:"amount"`
-	Currency   string     `json:"currency"`
-	FXRate     money.Rate `json:"fxRate"`
-	BaseAmount int64      `json:"baseAmount"`
+	Amount   int64  `json:"amount"`
+	Currency string `json:"currency"`
+	// FXRate is a rate entered by hand, the one actually charged, and is
+	// empty on a row that follows the rate table. ReferenceAmount is Amount
+	// in the reference currency at whichever applies; a row following the
+	// table is re-derived when the table is corrected, a row with its own
+	// rate is not. Statistics sum ReferenceAmount, so every row adds up in
+	// one currency.
+	FXRate          money.Rate `json:"fxRate,omitempty"`
+	ReferenceAmount int64      `json:"referenceAmount"`
 
 	AccountID        string `json:"accountId"`
 	CounterAccountID string `json:"counterAccountId,omitempty"`
@@ -376,7 +389,7 @@ func (l *Ledger) Add(ctx context.Context, t Transaction) (Transaction, error) {
 		(id,kind,date,amount,currency,fx_rate,base_amount,account_id,counter_account_id,counter_amount,
 		 category_id,payee_id,description,notes,status,recurring_rule_id,is_recurring_instance,created_at,modified_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.Kind, t.Date, t.Amount, t.Currency, string(t.FXRate), t.BaseAmount, t.AccountID,
+		t.ID, t.Kind, t.Date, t.Amount, t.Currency, string(t.FXRate), t.ReferenceAmount, t.AccountID,
 		nullIf(t.CounterAccountID), t.CounterAmount, nullIf(t.CategoryID), nullIf(t.PayeeID),
 		t.Description, t.Notes, t.Status, nullIf(t.RecurringRuleID), boolInt(t.IsRecurringInstance), ts, ts)
 	if err != nil {
@@ -458,10 +471,11 @@ func (l *Ledger) prepare(ctx context.Context, t *Transaction) error {
 		return fmt.Errorf("unknown transaction kind %q", t.Kind)
 	}
 
-	if err := l.freezeBase(ctx, t); err != nil {
+	rate, err := l.freezeBase(ctx, t)
+	if err != nil {
 		return err
 	}
-	return l.checkSplits(t)
+	return l.checkSplits(t, rate)
 }
 
 // writeLines stores the split lines and tags of a transaction whose row is
@@ -473,7 +487,7 @@ func (l *Ledger) writeLines(ctx context.Context, tx *sql.Tx, t *Transaction) err
 			s.ID = newID()
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO splits (id,transaction_id,category_id,amount,base_amount,note,sort_order)
-			VALUES (?,?,?,?,?,?,?)`, s.ID, t.ID, s.CategoryID, s.Amount, s.BaseAmount, s.Note, i); err != nil {
+			VALUES (?,?,?,?,?,?,?)`, s.ID, t.ID, s.CategoryID, s.Amount, s.ReferenceAmount, s.Note, i); err != nil {
 			return err
 		}
 	}
@@ -511,40 +525,41 @@ func (l *Ledger) checkCategory(ctx context.Context, t *Transaction) error {
 	return nil
 }
 
-// freezeBase computes base_amount once, from the rate at entry, spec 8. A
-// transaction in the base currency has rate 1. Otherwise the caller's rate
-// wins, then the fx_rates table for that date, and with neither the save is
-// refused rather than guessed.
-func (l *Ledger) freezeBase(ctx context.Context, t *Transaction) error {
-	if t.Currency == l.base {
-		t.FXRate = "1"
-		t.BaseAmount = t.Amount
-		return nil
+// freezeBase computes the reference amount, spec 8, and reports the rate it
+// used. A transaction in the reference currency is at par. Otherwise the
+// caller's rate wins, then the table's for that date, and with neither the
+// save is refused rather than guessed. A caller's rate stays on the row and
+// exempts it from re-derivation even when it happens to agree with the
+// table: it records what was charged, and a client sends one only when it
+// was typed.
+func (l *Ledger) freezeBase(ctx context.Context, t *Transaction) (money.Rate, error) {
+	if t.Currency == l.reference {
+		t.FXRate = ""
+		t.ReferenceAmount = t.Amount
+		return "1", nil
 	}
-	if t.FXRate == "" {
-		var rate string
-		err := l.db.QueryRowContext(ctx,
-			`SELECT rate FROM fx_rates WHERE currency=? AND date<=? ORDER BY date DESC LIMIT 1`,
-			t.Currency, t.Date).Scan(&rate)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("no %s to %s rate known for %s: give one, or add it to the rate table", t.Currency, l.base, t.Date)
-		}
-		if err != nil {
-			return err
-		}
-		t.FXRate = money.Rate(rate)
-	}
-	base, err := money.Convert(money.New(t.Amount, t.Currency), t.FXRate, l.base)
+	filed, onFile, err := l.RateOn(ctx, t.Currency, t.Date)
 	if err != nil {
-		return err
+		return "", err
 	}
-	t.BaseAmount = base.Minor
-	return nil
+	rate := t.FXRate
+	switch {
+	case rate == "" && !onFile:
+		return "", fmt.Errorf("no %s to %s rate known for %s: give one, or add it to the rate table", t.Currency, l.reference, t.Date)
+	case rate == "":
+		rate = filed
+	}
+	ref, err := money.Convert(money.New(t.Amount, t.Currency), rate, l.reference)
+	if err != nil {
+		return "", err
+	}
+	t.ReferenceAmount = ref.Minor
+	return rate, nil
 }
 
 // checkSplits enforces spec 1.3: lines sum to the parent, exactly, and each
-// line carries its own frozen base amount in proportion.
-func (l *Ledger) checkSplits(t *Transaction) error {
+// line carries its own reference amount in proportion, at the parent's rate.
+func (l *Ledger) checkSplits(t *Transaction, rate money.Rate) error {
 	if len(t.Splits) == 0 {
 		return nil
 	}
@@ -565,11 +580,11 @@ func (l *Ledger) checkSplits(t *Transaction) error {
 			s.Amount = -s.Amount
 		}
 		sum += s.Amount
-		base, err := money.Convert(money.New(s.Amount, t.Currency), t.FXRate, l.base)
+		ref, err := money.Convert(money.New(s.Amount, t.Currency), rate, l.reference)
 		if err != nil {
 			return err
 		}
-		s.BaseAmount = base.Minor
+		s.ReferenceAmount = ref.Minor
 	}
 	if sum != t.Amount {
 		remainder := money.New(t.Amount-sum, t.Currency)
@@ -687,7 +702,7 @@ func (l *Ledger) Transactions(ctx context.Context, f Filter) ([]Transaction, err
 		var t Transaction
 		var rate string
 		var instance int
-		if err := rows.Scan(&t.ID, &t.Kind, &t.Date, &t.Amount, &t.Currency, &rate, &t.BaseAmount,
+		if err := rows.Scan(&t.ID, &t.Kind, &t.Date, &t.Amount, &t.Currency, &rate, &t.ReferenceAmount,
 			&t.AccountID, &t.CounterAccountID, &t.CounterAmount, &t.CategoryID, &t.PayeeID,
 			&t.Description, &t.Notes, &t.Status, &t.CreatedAt, &t.ModifiedAt, &t.DeletedAt,
 			&t.RecurringRuleID, &instance, &t.PayeeName); err != nil {

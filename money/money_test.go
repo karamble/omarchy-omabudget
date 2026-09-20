@@ -185,20 +185,22 @@ func TestConvert(t *testing.T) {
 	}
 }
 
-// TestBaseAmountIsFrozen is the property spec 8 insists on: a rate change
-// later must not move a historical report. The frozen amount is a number in
-// the row, not a recomputation, so this test pins the contract at the money
-// layer: converting again with a different rate gives a different number, and
-// the caller is expected to keep the first one.
-func TestBaseAmountIsFrozen(t *testing.T) {
+// TestConvertIsDeterministic: a stored base amount can be re-derived from the
+// row's own amount and rate and land on the same number, and only a different
+// rate moves it.
+func TestConvertIsDeterministic(t *testing.T) {
 	a := New(10000, "PLN")
 	first, _ := Convert(a, "0.2320", "EUR")
+	again, _ := Convert(a, "0.2320", "EUR")
 	later, _ := Convert(a, "0.2500", "EUR")
+	if first != again {
+		t.Errorf("the same rate gave %v then %v", first, again)
+	}
 	if first == later {
 		t.Fatal("rates differ, results should differ")
 	}
 	if first.Minor != 2320 {
-		t.Errorf("the frozen amount should still read 23.20, got %v", first)
+		t.Errorf("100 PLN at 0.2320 should read 23.20, got %v", first)
 	}
 }
 
@@ -206,6 +208,131 @@ func TestConvertRefusesBadRate(t *testing.T) {
 	for _, r := range []Rate{"", "0", "-1", "abc"} {
 		if _, err := Convert(New(100, "PLN"), r, "EUR"); err == nil {
 			t.Errorf("rate %q should be refused", r)
+		}
+	}
+}
+
+// TestCrossRate: two rates against one reference cross into a rate between
+// the two commodities, kept as a fraction in lowest terms.
+func TestCrossRate(t *testing.T) {
+	cases := []struct {
+		from, to Rate
+		want     Rate
+	}{
+		{"0.5", "0.25", "2"},
+		{"0.25", "0.5", "1/2"},
+		{"1", "8", "1/8"},
+		{"0.235", "0.92", "47/184"},
+		{"1", "3", "1/3"},
+		{"2", "4", "1/2"},
+	}
+	for _, c := range cases {
+		got, err := CrossRate(c.from, c.to)
+		if err != nil {
+			t.Errorf("CrossRate(%s, %s) error: %v", c.from, c.to, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("CrossRate(%s, %s) = %s, want %s", c.from, c.to, got, c.want)
+		}
+	}
+}
+
+// TestCrossRateIdentity: a commodity crossed with itself is 1 before any rate
+// is read, so nothing on file is needed for it, and nothing on file can
+// change it.
+func TestCrossRateIdentity(t *testing.T) {
+	for _, r := range []Rate{"", "0", "abc", "0.235"} {
+		got, err := CrossRate(r, r)
+		if err != nil || got != "1" {
+			t.Errorf("CrossRate(%q, %q) = %q, %v; want 1", r, r, got, err)
+		}
+	}
+}
+
+// TestCrossRateThroughReference: converting through a cross rounds once, at
+// the target. A rate trimmed to six places on the way would land elsewhere.
+func TestCrossRateThroughReference(t *testing.T) {
+	cross, err := CrossRate("0.235", "0.92") // PLN and USD, both against EUR
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 1,000,000 PLN = 1,000,000 * 47/184 USD = 255434.7826... USD
+	got, err := Convert(New(100000000, "PLN"), cross, "USD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Minor != 25543478 {
+		t.Errorf("exact cross gives %v, want 255434.78 USD", got)
+	}
+	trimmed, _ := Convert(New(100000000, "PLN"), "0.255435", "USD")
+	if trimmed.Minor == got.Minor {
+		t.Error("a trimmed rate should land on a different cent, or this test proves nothing")
+	}
+	// Sign is preserved through a fractional rate.
+	neg, err := Convert(New(-100000000, "PLN"), cross, "USD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if neg.Minor != -25543478 {
+		t.Errorf("negative cross gives %v, want -255434.78 USD", neg)
+	}
+}
+
+func TestCrossRateRefusesZeroAndNegative(t *testing.T) {
+	cases := []struct{ from, to Rate }{
+		{"0.5", "0"}, {"0", "0.5"}, {"0.5", "-1"}, {"-1", "0.5"}, {"0.5", "abc"}, {"", "0.5"},
+	}
+	for _, c := range cases {
+		if _, err := CrossRate(c.from, c.to); !errors.Is(err, ErrMalformed) {
+			t.Errorf("CrossRate(%q, %q) err = %v, want ErrMalformed", c.from, c.to, err)
+		}
+	}
+}
+
+// TestConvertOverflow: a commodity with eighteen minor digits runs out of
+// int64 at a little over nine of its units, and the answer is a refusal
+// rather than a wrapped number.
+func TestConvertOverflow(t *testing.T) {
+	if _, err := Convert(New(1000, "EUR"), "1", "ETH"); !errors.Is(err, ErrOverflow) {
+		t.Errorf("10 EUR into ETH minor units: err = %v, want ErrOverflow", err)
+	}
+	if _, err := Convert(New(9223372036854775807, "EUR"), "2", "EUR"); !errors.Is(err, ErrOverflow) {
+		t.Errorf("doubling MaxInt64: err = %v, want ErrOverflow", err)
+	}
+	if _, err := Convert(New(-9223372036854775807, "EUR"), "2", "EUR"); !errors.Is(err, ErrOverflow) {
+		t.Errorf("doubling -MaxInt64: err = %v, want ErrOverflow", err)
+	}
+	// Just inside the limit still converts.
+	if got, err := Convert(New(900, "EUR"), "1", "ETH"); err != nil || got.Minor != 9000000000000000000 {
+		t.Errorf("9 EUR into ETH = %v, %v", got, err)
+	}
+}
+
+// TestConvertAcceptsFraction: a rate written as num/den is read exactly.
+func TestConvertAcceptsFraction(t *testing.T) {
+	got, err := Convert(New(300, "EUR"), "1/3", "EUR")
+	if err != nil || got.Minor != 100 {
+		t.Errorf("3.00 at 1/3 = %v, %v; want 1.00", got, err)
+	}
+}
+
+func TestRateEqual(t *testing.T) {
+	cases := []struct {
+		a, b Rate
+		want bool
+	}{
+		{"0.235", "0.2350", true},
+		{"1", "1.0", true},
+		{"1/4", "0.25", true},
+		{"0.235", "0.24", false},
+		{"abc", "abc", false},
+		{"", "", false},
+		{"0", "0", false},
+	}
+	for _, c := range cases {
+		if got := c.a.Equal(c.b); got != c.want {
+			t.Errorf("Rate(%q).Equal(%q) = %v, want %v", c.a, c.b, got, c.want)
 		}
 	}
 }

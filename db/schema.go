@@ -3,16 +3,23 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
+
+	"github.com/karamble/omarchy-omabudget/money"
 )
 
-// migration is one numbered, forward-only step. statements run in order inside
-// a transaction; after runs in the same transaction for anything that needs
-// Go rather than SQL, such as seeding.
+// migration is one numbered, forward-only step. pre runs first, outside any
+// transaction, for what SQLite refuses inside one: a VACUUM INTO snapshot, or
+// a pragma such as foreign_keys, which is silently ignored mid-transaction.
+// statements then run in order inside a transaction; after runs in the same
+// transaction for anything that needs Go rather than SQL, such as seeding.
 type migration struct {
 	version    int
 	name       string
+	pre        func(ctx context.Context, d *DB) error
 	statements []string
-	after      func(ctx context.Context, tx *sql.Tx) error
+	after      func(ctx context.Context, tx *sql.Tx, opts Options) error
 }
 
 // Amounts are integer minor units (see the money package). Dates are ISO
@@ -197,4 +204,127 @@ var migrations = []migration{
 		// cannot book anything.
 		after: seedCategories,
 	},
+	{
+		version: 2,
+		name:    "rate reference",
+		statements: []string{
+			// ---- meta: facts about the ledger that must travel with it
+			`CREATE TABLE meta (
+				key   TEXT PRIMARY KEY,
+				value TEXT NOT NULL
+			)`,
+		},
+		// Every rate on file so far is quoted against the base currency, so
+		// that is what the reference is pinned to. It never moves again.
+		after: pinRateReference,
+	},
+	{
+		version: 3,
+		name:    "rate marker",
+		// From here on fx_rate is empty on a row that follows the rate
+		// table, and holds the rate only when it was entered by hand.
+		after: blankDerivedRates,
+	},
+	{
+		version: 4,
+		name:    "budget currency",
+		statements: []string{
+			// A plan is kept in the currency it was typed in, so a rate
+			// correction never rewrites what was planned.
+			`ALTER TABLE budgets ADD COLUMN currency TEXT NOT NULL DEFAULT ''`,
+		},
+		// Every plan filed before this column existed was typed in the
+		// reference.
+		after: fillBudgetCurrency,
+	},
+}
+
+// fillBudgetCurrency stamps every budget line with the reference.
+func fillBudgetCurrency(ctx context.Context, tx *sql.Tx, _ Options) error {
+	var reference string
+	if err := tx.QueryRowContext(ctx, `SELECT value FROM meta WHERE key=?`, MetaRateReference).Scan(&reference); err != nil {
+		return fmt.Errorf("reading the rate reference: %w", err)
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE budgets SET currency=? WHERE currency=''`, reference)
+	return err
+}
+
+// pinRateReference records the currency the rates are quoted against.
+func pinRateReference(ctx context.Context, tx *sql.Tx, opts Options) error {
+	ref := strings.ToUpper(strings.TrimSpace(opts.RateReference))
+	if len(ref) != 3 {
+		return fmt.Errorf("rate reference %q must be a three-letter currency code", opts.RateReference)
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, ?)`, MetaRateReference, ref)
+	return err
+}
+
+// blankDerivedRates clears fx_rate on every row in the reference currency and
+// on every row whose rate is what the table says for its date, so only rates
+// entered by hand remain. The lookup is the one RateOn makes: the latest rate
+// on or before the date, else the earliest on file.
+func blankDerivedRates(ctx context.Context, tx *sql.Tx, _ Options) error {
+	var reference string
+	if err := tx.QueryRowContext(ctx, `SELECT value FROM meta WHERE key=?`, MetaRateReference).Scan(&reference); err != nil {
+		return fmt.Errorf("reading the rate reference: %w", err)
+	}
+	type dated struct{ date, rate string }
+	rates := map[string][]dated{} // by currency, oldest first
+	rows, err := tx.QueryContext(ctx, `SELECT currency, date, rate FROM fx_rates ORDER BY date`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var currency, date, rate string
+		if err := rows.Scan(&currency, &date, &rate); err != nil {
+			rows.Close()
+			return err
+		}
+		rates[currency] = append(rates[currency], dated{date, rate})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	tableRate := func(currency, date string) (string, bool) {
+		filed := rates[currency]
+		for i := len(filed) - 1; i >= 0; i-- {
+			if filed[i].date <= date {
+				return filed[i].rate, true
+			}
+		}
+		if len(filed) > 0 {
+			return filed[0].rate, true
+		}
+		return "", false
+	}
+
+	rows, err = tx.QueryContext(ctx, `SELECT id, currency, date, fx_rate FROM transactions WHERE currency <> ?`, reference)
+	if err != nil {
+		return err
+	}
+	var derived []any
+	for rows.Next() {
+		var id, currency, date, rate string
+		if err := rows.Scan(&id, &currency, &date, &rate); err != nil {
+			rows.Close()
+			return err
+		}
+		if filed, ok := tableRate(currency, date); ok && money.Rate(rate).Equal(money.Rate(filed)) {
+			derived = append(derived, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE transactions SET fx_rate='' WHERE currency=?`, reference); err != nil {
+		return err
+	}
+	for _, id := range derived {
+		if _, err := tx.ExecContext(ctx, `UPDATE transactions SET fx_rate='' WHERE id=?`, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

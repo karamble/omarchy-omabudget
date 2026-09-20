@@ -70,7 +70,7 @@ func TestBudgets(t *testing.T) {
 	}{
 		{"Food", 30000}, {"Groceries", 20000}, {"Coffee & snacks", 400}, {"Fuel", 10000}, {"Rent", 10000},
 	} {
-		if err := l.SetBudget(ctx, b.ref, "2026-09", b.planned); err != nil {
+		if err := l.SetBudget(ctx, b.ref, "2026-09", b.planned, ""); err != nil {
 			t.Fatalf("SetBudget(%s): %v", b.ref, err)
 		}
 	}
@@ -136,34 +136,34 @@ func TestSetBudget(t *testing.T) {
 		return -1
 	}
 
-	if err := l.SetBudget(ctx, "Rent", "2026-09", 10000); err != nil {
+	if err := l.SetBudget(ctx, "Rent", "2026-09", 10000, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.SetBudget(ctx, "Fuel", "2026-09", 5000); err != nil {
+	if err := l.SetBudget(ctx, "Fuel", "2026-09", 5000, ""); err != nil {
 		t.Fatal(err)
 	}
 	if count() != 2 || planned("housing/rent") != 10000 {
 		t.Fatalf("after two sets: %d rows, rent %d", count(), planned("housing/rent"))
 	}
 	// Setting again replaces rather than duplicates.
-	if err := l.SetBudget(ctx, "housing/rent", "2026-09", 12000); err != nil {
+	if err := l.SetBudget(ctx, "housing/rent", "2026-09", 12000, ""); err != nil {
 		t.Fatal(err)
 	}
 	if count() != 2 || planned("housing/rent") != 12000 {
 		t.Errorf("after replacing: %d rows, rent %d", count(), planned("housing/rent"))
 	}
 	// Zero removes the line, and removing an absent line is not an error.
-	if err := l.SetBudget(ctx, "Fuel", "2026-09", 0); err != nil {
+	if err := l.SetBudget(ctx, "Fuel", "2026-09", 0, ""); err != nil {
 		t.Fatal(err)
 	}
 	if count() != 1 || planned("transport/fuel") != -1 {
 		t.Errorf("after zero: %d rows, fuel %d", count(), planned("transport/fuel"))
 	}
-	if err := l.SetBudget(ctx, "Fuel", "2026-09", 0); err != nil {
+	if err := l.SetBudget(ctx, "Fuel", "2026-09", 0, ""); err != nil {
 		t.Errorf("zero on an absent line: %v", err)
 	}
 	// Another period is its own plan.
-	if err := l.SetBudget(ctx, "Rent", "2026-10", 999); err != nil {
+	if err := l.SetBudget(ctx, "Rent", "2026-10", 999, ""); err != nil {
 		t.Fatal(err)
 	}
 	if count() != 1 || planned("housing/rent") != 12000 {
@@ -191,7 +191,7 @@ func TestSetBudget(t *testing.T) {
 	}
 	for _, c := range refused {
 		t.Run(c.name, func(t *testing.T) {
-			err := l.SetBudget(ctx, c.ref, c.period, c.planned)
+			err := l.SetBudget(ctx, c.ref, c.period, c.planned, "")
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("SetBudget(%s, %s, %d) = %v, want an error mentioning %q", c.ref, c.period, c.planned, err, c.want)
 			}
@@ -202,5 +202,97 @@ func TestSetBudget(t *testing.T) {
 	}
 	if count() != 1 {
 		t.Errorf("a refused set changed the table: %d rows", count())
+	}
+}
+
+// TestBudgetCurrency: a plan is kept in the currency it was typed in and
+// held against spending in the reference at today's rate, so a rate
+// correction moves the card and never the row. The helpers carry the
+// currency, planning from history files in the reference, and the last rate
+// a plan depends on cannot go.
+func TestBudgetCurrency(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+	a := mustAccount(t, l, "Main", Checking, "EUR", 100000)
+	if _, err := l.SetRate(ctx, "PLN", "0.25", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	spend(t, l, a, "Groceries", "2026-09-05", 5000)
+	row := func(key string) (int64, string) {
+		t.Helper()
+		var planned int64
+		var currency string
+		if err := l.db.QueryRow(`SELECT planned, currency FROM budgets WHERE period=? AND category_id='food/groceries'`, key).Scan(&planned, &currency); err != nil {
+			t.Fatal(err)
+		}
+		return planned, currency
+	}
+
+	// 400 PLN reads as 100 EUR against 50 EUR spent.
+	if err := l.SetBudget(ctx, "Groceries", "2026-09", 40000, "pln"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := l.Budgets(ctx, "2026-09", "2026-09-01", "2026-09-30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Planned != 10000 || len(b.Cards) != 1 || b.Cards[0].Planned != 10000 || b.Cards[0].Remaining != 5000 || b.Cards[0].Pct != 50 {
+		t.Fatalf("%+v", b)
+	}
+	if planned, currency := row("2026-09"); planned != 40000 || currency != "PLN" {
+		t.Fatalf("row holds %d %s, want 40000 PLN", planned, currency)
+	}
+
+	// A corrected rate moves the card and leaves the row alone.
+	if _, err := l.SetRate(ctx, "PLN", "0.5", ""); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = l.Budgets(ctx, "2026-09", "2026-09-01", "2026-09-30")
+	if b.Planned != 20000 || b.Cards[0].Pct != 25 {
+		t.Fatalf("after the correction: %+v", b)
+	}
+	if planned, currency := row("2026-09"); planned != 40000 || currency != "PLN" {
+		t.Fatalf("the correction rewrote the row to %d %s", planned, currency)
+	}
+	rep, err := l.Spending(ctx, "2026-09-01", "2026-09-30", "2026-08-01", "2026-08-31", "2026-09")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Rows) != 1 || len(rep.Rows[0].Children) != 1 || rep.Rows[0].Children[0].Planned != 20000 {
+		t.Fatalf("report plan: %+v", rep.Rows)
+	}
+
+	// Copying and scaling keep the currency; scaling rounds in it.
+	if _, err := l.CopyBudget(ctx, "2026-09", "2026-10"); err != nil {
+		t.Fatal(err)
+	}
+	if planned, currency := row("2026-10"); planned != 40000 || currency != "PLN" {
+		t.Fatalf("copied row holds %d %s", planned, currency)
+	}
+	if _, err := l.ScaleBudget(ctx, "2026-10", 10); err != nil {
+		t.Fatal(err)
+	}
+	if planned, currency := row("2026-10"); planned != 44000 || currency != "PLN" {
+		t.Fatalf("scaled row holds %d %s", planned, currency)
+	}
+
+	// Planning from history sums reference spending, so it files in the
+	// reference.
+	if _, err := l.PlanFromHistory(ctx, "2026-10", [][2]string{{"2026-09-01", "2026-09-30"}}, PlanAverage, "Groceries"); err != nil {
+		t.Fatal(err)
+	}
+	if planned, currency := row("2026-10"); planned != 5000 || currency != "EUR" {
+		t.Fatalf("planned from history holds %d %s, want 5000 EUR", planned, currency)
+	}
+
+	// A plan needs a rate, and the rate a plan depends on stays.
+	if err := l.SetBudget(ctx, "Fuel", "2026-09", 100, "USD"); err == nil || !strings.Contains(err.Error(), "no USD rate") {
+		t.Fatalf("a plan in an unquoted currency: %v", err)
+	}
+	if err := l.RemoveRate(ctx, "PLN", "2026-09-13"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.RemoveRate(ctx, "PLN", "2026-01-01"); err == nil || !strings.Contains(err.Error(), "planned in PLN") {
+		t.Fatalf("the last rate under a plan went: %v", err)
 	}
 }

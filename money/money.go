@@ -1,6 +1,6 @@
 // Package money represents amounts as integer minor units per commodity.
-// Nothing here is a float: arithmetic is exact, and a base amount frozen at
-// entry stays the same number forever.
+// Nothing here is a float: arithmetic is exact, so converting the same amount
+// at the same rate gives the same number every time.
 package money
 
 import (
@@ -220,29 +220,79 @@ func (a Amount) Format() string {
 // String is Format with the currency, for logs and errors.
 func (a Amount) String() string { return a.Format() + " " + a.Currency }
 
-// Rate is an exchange rate kept as an exact decimal string, "4.3125", so it
-// can be frozen on a transaction and re-applied later to the same result.
+// Rate is an exchange rate kept as an exact string, so it can be stored on a
+// transaction and re-applied later to the same result: a decimal, "4.3125",
+// or a fraction, "47/184", which is what crossing two rates produces.
 type Rate string
 
-// Convert applies a rate to produce the base-currency amount, rounding half
-// away from zero to the base currency's minor unit. This is the one place
-// rounding happens, and its result is what gets frozen.
-func Convert(a Amount, rate Rate, base string) (Amount, error) {
+// parseRate reads a rate, refusing anything that is not a positive number.
+func parseRate(rate Rate) (*big.Rat, error) {
 	r, ok := new(big.Rat).SetString(string(rate))
 	if !ok || r.Sign() <= 0 {
-		return Amount{}, fmt.Errorf("%w: rate %q", ErrMalformed, rate)
+		return nil, fmt.Errorf("%w: rate %q", ErrMalformed, rate)
 	}
-	// original minor / original scale * rate * base scale
+	return r, nil
+}
+
+// Equal reports whether two rates are the same number, so "0.235" and
+// "0.2350" agree. A rate that does not parse equals nothing.
+func (r Rate) Equal(o Rate) bool {
+	a, err := parseRate(r)
+	if err != nil {
+		return false
+	}
+	b, err := parseRate(o)
+	if err != nil {
+		return false
+	}
+	return a.Cmp(b) == 0
+}
+
+// CrossRate derives the rate from one commodity to another when both are
+// quoted against the same reference: with 1 FROM = from REF and 1 TO = to REF,
+// 1 FROM = from/to TO. The quotient is kept as a fraction, so converting
+// through it rounds once, at the target's minor unit. Equal rates cross at 1
+// without being read, so a commodity converts to itself even when no rate is
+// on file for it.
+func CrossRate(from, to Rate) (Rate, error) {
+	if from == to {
+		return "1", nil
+	}
+	f, err := parseRate(from)
+	if err != nil {
+		return "", err
+	}
+	t, err := parseRate(to)
+	if err != nil {
+		return "", err
+	}
+	return Rate(new(big.Rat).Quo(f, t).RatString()), nil
+}
+
+// Convert applies a rate to produce the amount in the target commodity,
+// rounding half away from zero to that commodity's minor unit. This is the
+// one place rounding happens, and its result is what gets stored.
+func Convert(a Amount, rate Rate, to string) (Amount, error) {
+	r, err := parseRate(rate)
+	if err != nil {
+		return Amount{}, err
+	}
+	// original minor / original scale * rate * target scale
 	v := new(big.Rat).SetInt64(a.Minor)
 	v.Quo(v, new(big.Rat).SetInt(scale(a.Currency)))
 	v.Mul(v, r)
-	v.Mul(v, new(big.Rat).SetInt(scale(base)))
-	return Amount{Minor: roundHalfAway(v), Currency: strings.ToUpper(base)}, nil
+	v.Mul(v, new(big.Rat).SetInt(scale(to)))
+	minor, err := roundHalfAway(v)
+	if err != nil {
+		return Amount{}, err
+	}
+	return Amount{Minor: minor, Currency: strings.ToUpper(to)}, nil
 }
 
 // roundHalfAway rounds a rational to the nearest integer, halves away from
-// zero, which is what bank statements do.
-func roundHalfAway(r *big.Rat) int64 {
+// zero, which is what bank statements do. A result outside int64 is an
+// overflow rather than a wrapped number.
+func roundHalfAway(r *big.Rat) (int64, error) {
 	num := new(big.Int).Set(r.Num())
 	den := r.Denom()
 	neg := num.Sign() < 0
@@ -255,5 +305,8 @@ func roundHalfAway(r *big.Rat) int64 {
 	if neg {
 		q.Neg(q)
 	}
-	return q.Int64()
+	if !q.IsInt64() {
+		return 0, ErrOverflow
+	}
+	return q.Int64(), nil
 }

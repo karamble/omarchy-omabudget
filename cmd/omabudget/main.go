@@ -51,7 +51,7 @@ planning:
   category archive|restore|remove <category>
   category behaviour <category> monthly|rollover|goal|untracked
   category goal <category> <target> <YYYY-MM>
-  settings            show; settings model limits|envelope, period-start <day>, large-amount <amount>
+  settings            show; settings base-currency <CODE>, model limits|envelope, period-start <day>, large-amount <amount>
   rate                exchange rates on file; rate set <currency> <rate> [-date], rate remove <currency> <date>
   payees              who money went to; payee rename|category|alias|unalias|merge|remove
 

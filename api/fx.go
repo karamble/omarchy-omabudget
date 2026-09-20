@@ -1,7 +1,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/karamble/omarchy-omabudget/money"
 )
@@ -50,7 +52,20 @@ func (s *Server) handleRemoveRate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	currency, date := r.PathValue("currency"), r.PathValue("date")
+	currency, date := strings.ToUpper(r.PathValue("currency")), r.PathValue("date")
+	// Figures are shown in the base at its rate, so the base keeps its last
+	// one until another is filed or the base moves.
+	if base := s.Config().BaseCurrency; currency == base && base != l.Reference() {
+		filed, err := l.Rates(r.Context(), currency)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		if len(filed) == 1 && filed[0].Date == date {
+			s.fail(w, fmt.Errorf("%s is the base currency and this is its last rate: file another or change the base first", currency))
+			return
+		}
+	}
 	if err := l.RemoveRate(r.Context(), currency, date); err != nil {
 		s.fail(w, err)
 		return

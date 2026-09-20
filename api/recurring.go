@@ -33,9 +33,12 @@ type ruleIn struct {
 	Active          *bool    `json:"active,omitempty"`
 }
 
-// billRow is an occurrence with its names filled in for display.
+// billRow is an occurrence with its names filled in for display. Amount is
+// in the rule's own currency; BaseAmount is the same in the base, at the
+// rate on file, and zero when that currency has no rate.
 type billRow struct {
 	domain.Due
+	BaseAmount   int64  `json:"baseAmount"`
 	CategoryName string `json:"categoryName"`
 	CategoryIcon string `json:"categoryIcon"`
 	AccountName  string `json:"accountName"`
@@ -246,15 +249,27 @@ func (s *Server) bills(ctx context.Context, l *domain.Ledger, days, limit int) (
 	for _, a := range accounts {
 		names[a.ID] = a.Name
 	}
+	rates, err := l.RateTable(ctx, today.Format(dateFmt))
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]billRow, 0, len(due))
 	for _, d := range due {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		out = append(out, billRow{
+		row := billRow{
 			Due: d, CategoryName: index.Name(d.CategoryID), CategoryIcon: index.Icon(d.CategoryID),
 			AccountName: names[d.AccountID],
-		})
+		}
+		if ref, ok := domain.ToReference(d.Amount, d.Currency, l.Reference(), rates); ok {
+			row.BaseAmount = v.amount(ref)
+		}
+		out = append(out, row)
 	}
-	return out, nil
+	return out, v.done()
 }

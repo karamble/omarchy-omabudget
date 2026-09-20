@@ -243,6 +243,16 @@ func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	v, err := s.lensFor(r.Context(), l)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	cats = v.categories(cats)
+	if err := v.done(); err != nil {
+		s.fail(w, err)
+		return
+	}
 	writeJSON(w, s.logger, http.StatusOK, cats)
 }
 
@@ -434,11 +444,25 @@ func (s *Server) handleTransactions(w http.ResponseWriter, r *http.Request) {
 		Search: q.Get("q"), From: q.Get("from"), To: q.Get("to"),
 		Deleted: q.Get("deleted") == "1" || q.Get("deleted") == "true",
 	}
-	if v, err := money.Parse(q.Get("min"), l.Base()); err == nil {
-		f.Min = v.Minor
+	// The bounds are typed in the base and the query filters on reference
+	// amounts, so they convert here, before the SQL, and paging holds.
+	v, err := s.lensFor(r.Context(), l)
+	if err != nil {
+		s.fail(w, err)
+		return
 	}
-	if v, err := money.Parse(q.Get("max"), l.Base()); err == nil {
-		f.Max = v.Minor
+	for _, bound := range []struct {
+		key string
+		set *int64
+	}{{"min", &f.Min}, {"max", &f.Max}} {
+		typed, err := money.Parse(q.Get(bound.key), v.base)
+		if err != nil {
+			continue
+		}
+		if *bound.set, err = v.toReference(typed.Minor); err != nil {
+			s.fail(w, err)
+			return
+		}
 	}
 	if f.PayeeID != "" {
 		if p, err := l.Payee(r.Context(), f.PayeeID); err == nil {
@@ -518,19 +542,24 @@ type recentRow struct {
 }
 
 type dashboardOut struct {
-	BaseCurrency string            `json:"baseCurrency"`
-	Period       period            `json:"period"`
-	Totals       domain.Totals     `json:"totals"`
-	Previous     domain.Totals     `json:"previous"`
-	Liquid       int64             `json:"liquid"`
-	NetWorth     int64             `json:"netWorth"`
-	Accounts     []accountRow      `json:"accounts"`
-	Recent       []recentRow       `json:"recent"`
-	Cash         domain.CashSeries `json:"cash"`
-	Budget       domain.Budget     `json:"budget"`
-	Months       []monthOut        `json:"months"`
-	Bills        []billRow         `json:"bills"`
-	Model        string            `json:"model"`
+	// BaseCurrency is what every figure below is shown in, converted from
+	// the ledger's RateReference at today's rate; a ratio is the same in
+	// either. Decimals is the minor-unit digits of every currency in play.
+	BaseCurrency  string            `json:"baseCurrency"`
+	RateReference string            `json:"rateReference"`
+	Decimals      map[string]int    `json:"decimals"`
+	Period        period            `json:"period"`
+	Totals        domain.Totals     `json:"totals"`
+	Previous      domain.Totals     `json:"previous"`
+	Liquid        int64             `json:"liquid"`
+	NetWorth      int64             `json:"netWorth"`
+	Accounts      []accountRow      `json:"accounts"`
+	Recent        []recentRow       `json:"recent"`
+	Cash          domain.CashSeries `json:"cash"`
+	Budget        domain.Budget     `json:"budget"`
+	Months        []monthOut        `json:"months"`
+	Bills         []billRow         `json:"bills"`
+	Model         string            `json:"model"`
 	// Unconverted names the currencies liquid funds and net worth had to
 	// leave out, because no rate is on file for them.
 	Unconverted []string        `json:"unconverted,omitempty"`
@@ -569,25 +598,31 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.logger, http.StatusOK, out)
 }
 
-// dashboard assembles the document behind the app's every screen.
+// dashboard assembles the document behind the app's every screen. Every
+// figure is built in the reference and shown through the lens, so the base
+// can change without a single sum moving underneath.
 func (s *Server) dashboard(ctx context.Context, l *domain.Ledger) (dashboardOut, error) {
 	today := clock()
 	current := span{periodStart(today, s.Config().PeriodStartDay)}
 	p := current.bounds(today)
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		return dashboardOut{}, err
+	}
 
 	accounts, err := l.Accounts(ctx)
 	if err != nil {
 		return dashboardOut{}, err
 	}
-	// Liquid and net worth are undated balances in base currency, so rows
-	// dated ahead count here and not in the cash series. An account in another
-	// currency is read at the latest rate on file; one whose currency has no
-	// rate is left out and named, rather than quietly missing.
+	// Liquid and net worth are undated balances, so rows dated ahead count
+	// here and not in the cash series. An account in another currency is read
+	// at the latest rate on file; one whose currency has no rate is left out
+	// and named, rather than quietly missing.
 	rates, err := l.RateTable(ctx, today.Format(dateFmt))
 	if err != nil {
 		return dashboardOut{}, err
 	}
-	out := dashboardOut{BaseCurrency: l.Base(), Period: p, Accounts: []accountRow{}}
+	out := dashboardOut{BaseCurrency: v.base, RateReference: v.reference, Period: p, Accounts: []accountRow{}}
 	missing := map[string]bool{}
 	for _, a := range accounts {
 		b, err := l.Balance(ctx, a.ID)
@@ -595,7 +630,7 @@ func (s *Server) dashboard(ctx context.Context, l *domain.Ledger) (dashboardOut,
 			return dashboardOut{}, err
 		}
 		out.Accounts = append(out.Accounts, accountRow{Account: a, Balance: b.Minor})
-		v, ok := domain.InBase(b.Minor, a.Currency, l.Base(), rates)
+		v, ok := domain.ToReference(b.Minor, a.Currency, l.Reference(), rates)
 		if !ok {
 			missing[a.Currency] = true
 			continue
@@ -611,26 +646,32 @@ func (s *Server) dashboard(ctx context.Context, l *domain.Ledger) (dashboardOut,
 		out.Unconverted = append(out.Unconverted, c)
 	}
 	sort.Strings(out.Unconverted)
+	out.Liquid, out.NetWorth = v.amount(out.Liquid), v.amount(out.NetWorth)
 
-	// Totals over this period and the eleven before it, on base amounts,
-	// excluding transfers (P2) and categories flagged out of statistics.
+	// Totals over this period and the eleven before it, on reference
+	// amounts, excluding transfers (P2) and categories flagged out of
+	// statistics.
 	out.Months = make([]monthOut, 0, 12)
 	for _, sp := range spansBack(current, 12) {
 		tot, err := l.Totals(ctx, sp.from(), sp.to())
 		if err != nil {
 			return dashboardOut{}, err
 		}
-		out.Months = append(out.Months, monthOut{Key: sp.key(), Label: sp.label(), From: sp.from(), To: sp.to(), Totals: tot})
+		out.Months = append(out.Months, monthOut{Key: sp.key(), Label: sp.label(), From: sp.from(), To: sp.to(), Totals: v.totals(tot)})
 	}
 	out.Totals = out.Months[11].Totals
 	out.Previous = out.Months[10].Totals
 
-	if out.Cash, err = l.LiquidSeries(ctx, p.From, today.Format(dateFmt)); err != nil {
+	cash, err := l.LiquidSeries(ctx, p.From, today.Format(dateFmt))
+	if err != nil {
 		return dashboardOut{}, err
 	}
-	if out.Budget, err = l.Budgets(ctx, current.key(), p.From, p.To); err != nil {
+	out.Cash = v.cash(cash)
+	budget, err := l.Budgets(ctx, current.key(), p.From, p.To)
+	if err != nil {
 		return dashboardOut{}, err
 	}
+	out.Budget = v.budget(budget)
 
 	recent, err := l.Transactions(ctx, domain.Filter{Limit: 8})
 	if err != nil {
@@ -654,14 +695,27 @@ func (s *Server) dashboard(ctx context.Context, l *domain.Ledger) (dashboardOut,
 	if err != nil {
 		return dashboardOut{}, err
 	}
-	out.Envelopes = envelopeSummary{ToBeBudgeted: env.ToBeBudgeted, Held: env.Held, Deficit: env.Deficit}
+	out.Envelopes = envelopeSummary{ToBeBudgeted: v.amount(env.ToBeBudgeted), Held: v.amount(env.Held), Deficit: v.amount(env.Deficit)}
 	out.DefaultAccountID = s.defaultAccount(ctx, l)
 	out.Today = today.Format(dateFmt)
+	// Every currency an account or a transaction carries, plus the two the
+	// figures are kept and shown in, so a form knows how to write any of them.
+	currencies, err := l.Currencies(ctx)
+	if err != nil {
+		return dashboardOut{}, err
+	}
+	out.Decimals = map[string]int{}
+	for _, c := range append(currencies, v.base, v.reference) {
+		out.Decimals[c] = money.Decimals(c)
+	}
 	// The raw table, not the rates local above: that one is RateTable, which
 	// reaches for the earliest rate when none covers the date, while an entry
 	// is refused instead. A form previewing an entry has to follow the entry's
 	// rule.
 	if out.Rates, err = l.Rates(ctx, ""); err != nil {
+		return dashboardOut{}, err
+	}
+	if err := v.done(); err != nil {
 		return dashboardOut{}, err
 	}
 	out.Insights = insights(out)
@@ -689,12 +743,26 @@ func (s *Server) handleBudgets(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	b, err := l.Budgets(r.Context(), sp.key(), sp.from(), sp.to())
+	b, err := s.budgets(r.Context(), l, sp)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	writeJSON(w, s.logger, http.StatusOK, b)
+}
+
+// budgets is the period's plan shown in the base.
+func (s *Server) budgets(ctx context.Context, l *domain.Ledger, sp span) (domain.Budget, error) {
+	b, err := l.Budgets(ctx, sp.key(), sp.from(), sp.to())
+	if err != nil {
+		return domain.Budget{}, err
+	}
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		return domain.Budget{}, err
+	}
+	b = v.budget(b)
+	return b, v.done()
 }
 
 // budgetIn is one line of the plan as typed: the amount is text, like a
@@ -719,16 +787,18 @@ func (s *Server) handleSetBudget(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	planned, err := plannedAmount(in.Planned, l.Base())
+	planned, err := plannedAmount(in.Planned, s.Config().BaseCurrency)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	if err := l.SetBudget(r.Context(), in.Category, sp.key(), planned); err != nil {
+	// The plan is filed in the base it was typed in and read at the rate on
+	// file, so the row never moves when the base or a rate does.
+	if err := l.SetBudget(r.Context(), in.Category, sp.key(), planned, s.Config().BaseCurrency); err != nil {
 		s.fail(w, err)
 		return
 	}
-	b, err := l.Budgets(r.Context(), sp.key(), sp.from(), sp.to())
+	b, err := s.budgets(r.Context(), l, sp)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -809,7 +879,7 @@ func (s *Server) handleBudgetHelpers(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	b, err := l.Budgets(ctx, sp.key(), sp.from(), sp.to())
+	b, err := s.budgets(ctx, l, sp)
 	if err != nil {
 		s.fail(w, err)
 		return

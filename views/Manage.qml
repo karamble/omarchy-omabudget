@@ -115,7 +115,8 @@ Item {
   property var rates: []
   property int rateCursor: 0
   readonly property var currentRate: rates.length > 0 ? rates[Math.min(rateCursor, rates.length - 1)] : null
-  readonly property string base: app && app.snap && app.snap.baseCurrency ? String(app.snap.baseCurrency) : ""
+  // Rates are quoted against the reference, whatever figures are shown in.
+  readonly property string base: app ? app.rateReference : ""
 
   function reloadRates() {
     if (!app) return

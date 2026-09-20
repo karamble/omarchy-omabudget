@@ -93,6 +93,10 @@ Overlay {
     })
   }
 
+  // The rate the row carried when the form opened on it, so an unchanged
+  // field is not sent back as if it had been typed.
+  property string rateShown: ""
+
   // The rate this entry would freeze at, spec 8: a rate typed here wins, and
   // otherwise the table is asked for the one filed on or before the date.
   readonly property var effectiveRate: {
@@ -111,19 +115,20 @@ Overlay {
     return null
   }
 
-  // Every statistic is kept in the base currency, so an account in another
-  // one needs the rate to freeze the base amount with, spec 8.
-  readonly property string baseCurrency: app && app.snap && app.snap.baseCurrency ? String(app.snap.baseCurrency) : ""
+  // Every figure is kept in the reference currency, so an account in another
+  // one needs the rate to derive the reference amount with, spec 8. The base
+  // is only what figures are shown in.
+  readonly property string reference: app ? app.rateReference : ""
   readonly property string accountCurrency: {
     var a = card.accountOf(accountBox.value)
-    return a ? String(a.currency) : card.baseCurrency
+    return a ? String(a.currency) : card.reference
   }
   readonly property string toCurrency: {
     var a = card.accountOf(toBox.value)
     return a ? String(a.currency) : ""
   }
-  readonly property bool foreign: card.accountCurrency !== "" && card.baseCurrency !== ""
-                                 && card.accountCurrency !== card.baseCurrency
+  readonly property bool foreign: card.accountCurrency !== "" && card.reference !== ""
+                                 && card.accountCurrency !== card.reference
   readonly property bool crossCurrency: card.transfer && card.toCurrency !== ""
                                         && card.toCurrency !== card.accountCurrency
 
@@ -173,6 +178,7 @@ Overlay {
   function prefill() {
     lineModel.clear()
     card.split = false
+    card.rateShown = ""
     if (!editing) { card.applyDefaults(); return }
     amountField.text = card.plain(editing.amount, editing.currency)
     dateField.text = editing.date || ""
@@ -183,7 +189,10 @@ Overlay {
     categoryBox.value = editing.categoryId || ""
     accountBox.value = editing.accountId || ""
     toBox.value = editing.counterAccountId || ""
-    if (editing.fxRate && String(editing.fxRate) !== "1") rateField.text = String(editing.fxRate)
+    if (editing.fxRate && String(editing.fxRate) !== "1") {
+      rateField.text = String(editing.fxRate)
+      card.rateShown = rateField.text
+    }
     if (editing.counterAmount !== undefined && editing.counterAmount !== null)
       receivedField.text = card.plain(editing.counterAmount, card.toCurrency)
     var lines = editing.splits || []
@@ -268,7 +277,10 @@ Overlay {
       if (card.status !== "cleared") argv.push("-status", card.status)
       done = "added " + amount
     }
-    if (card.foreign && rateField.text.trim() !== "") argv.push("-rate", rateField.text.trim())
+    // A rate goes only when it was typed or changed here. What the field
+    // showed on edit is the row's own rate, which the daemon keeps anyway.
+    var typedRate = rateField.text.trim()
+    if (card.foreign && typedRate !== "" && typedRate !== card.rateShown) argv.push("-rate", typedRate)
     if (card.crossCurrency && receivedField.text.trim() !== "") argv.push("-received", receivedField.text.trim())
     if (card.split && !card.transfer) {
       for (var n = 0; n < lineModel.count; n++) {
@@ -298,25 +310,24 @@ Overlay {
     font.letterSpacing: 1
   }
 
-  // What the amount becomes in the base currency, and at which rate. Shown
-  // only for an account in another currency, where the answer is not obvious
-  // and where a missing rate means the entry will be refused.
+  // What the amount becomes in the reference currency, and at which rate.
+  // Shown only for an account in another currency, where the answer is not
+  // obvious and where a missing rate means the entry will be refused.
   component CurrencyNote: Text {
     readonly property var known: card.effectiveRate
-    visible: card.accountCurrency !== "" && card.baseCurrency !== ""
-             && card.accountCurrency !== card.baseCurrency
+    visible: card.foreign
     text: {
       if (!known)
-        return "no " + card.accountCurrency + " to " + card.baseCurrency
+        return "no " + card.accountCurrency + " to " + card.reference
              + " rate on file for " + card.entryDate + ": the entry will be refused until one is added"
       var at = "at " + String(known.rate) + (known.date ? " (" + String(known.date) + ")" : "")
       var v = card.app ? card.app.evaluate(amountField.text) : NaN
       if (!isFinite(v)) return at
-      var d = card.app.decimalsFor(card.baseCurrency)
+      var d = card.app.decimalsFor(card.reference)
       var conv = v * Number(known.rate)
       var pow = Math.pow(10, d)
       var rounded = (conv < 0 ? -1 : 1) * Math.round(Math.abs(conv) * pow) / pow
-      return "= " + rounded.toFixed(d) + " " + card.baseCurrency + " " + at
+      return "= " + rounded.toFixed(d) + " " + card.reference + " " + at
     }
     color: known ? card.dim : (card.app ? card.app.urgent : card.fg)
     font.family: card.ff
@@ -407,7 +418,7 @@ Overlay {
         visible: card.foreign
         width: (parent.width - parent.spacing) * 0.5
         spacing: Style.space(4)
-        Label { text: "RATE, 1 " + card.accountCurrency + " IN " + card.baseCurrency }
+        Label { text: "RATE, 1 " + card.accountCurrency + " IN " + card.reference }
         Field {
           id: rateField
           width: parent.width

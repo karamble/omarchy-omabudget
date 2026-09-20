@@ -136,13 +136,24 @@ func runBudget(args []string) error {
 	return tw.Flush()
 }
 
-// baseCurrency asks the daemon which currency budgets are kept in.
+// baseCurrency asks the daemon which currency figures are shown in.
 func baseCurrency(ctx context.Context, cl *client.Client) (string, error) {
+	base, _, err := currencies(ctx, cl)
+	return base, err
+}
+
+// currencies asks the daemon which currency figures are shown in and which
+// one the rates are quoted against.
+func currencies(ctx context.Context, cl *client.Client) (base, reference string, err error) {
 	var h struct {
-		BaseCurrency string `json:"baseCurrency"`
+		BaseCurrency  string `json:"baseCurrency"`
+		RateReference string `json:"rateReference"`
 	}
 	if err := cl.Do(ctx, "GET", "/api/health", nil, &h); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return h.BaseCurrency, nil
+	if h.RateReference == "" {
+		h.RateReference = h.BaseCurrency
+	}
+	return h.BaseCurrency, h.RateReference, nil
 }

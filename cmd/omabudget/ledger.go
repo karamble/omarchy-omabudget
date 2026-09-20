@@ -89,7 +89,11 @@ func runAdd(args []string) error {
 		"description": *desc,
 		"notes":       *notes,
 		"payee":       *payee,
-		"fxRate":      *rate,
+	}
+	// A rate is sent only when one was typed: a rate on the row is a record
+	// of what was charged, and it is kept when the table is corrected.
+	if *rate != "" {
+		in["fxRate"] = *rate
 	}
 	switch {
 	case *transferTo != "":
@@ -501,10 +505,12 @@ func editOne(ctx context.Context, cl *client.Client, c *common, id string, set m
 		return err
 	}
 
+	// The stored rate is not echoed back: the daemon keeps a rate the row
+	// carries, and sending it would turn every edit into a typed rate.
 	in := map[string]any{
 		"kind": string(cur.Kind), "account": cur.AccountID, "counterAccount": cur.CounterAccountID,
 		"amount": money.New(cur.Amount, cur.Currency).Abs().Format(), "currency": cur.Currency,
-		"fxRate": string(cur.FXRate), "category": cur.CategoryID, "date": cur.Date,
+		"category": cur.CategoryID, "date": cur.Date,
 		"description": cur.Description, "notes": cur.Notes, "tags": cur.Tags, "status": string(cur.Status),
 		"payee": cur.PayeeName,
 	}

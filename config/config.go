@@ -32,7 +32,9 @@ type Config struct {
 	Version  int    `json:"version"`
 	APIToken string `json:"apiToken"`
 
-	// BaseCurrency is what every statistic is computed in, spec section 8.
+	// BaseCurrency is what every figure is shown in, spec section 8. The
+	// ledger keeps its figures in its own reference currency and the daemon
+	// converts at the rate on file, so this can change at any time.
 	BaseCurrency string `json:"baseCurrency"`
 
 	// Model selects category limits or envelopes.
@@ -41,9 +43,11 @@ type Config struct {
 	// PeriodStartDay is the day of month a budget period begins, 1 to 28.
 	PeriodStartDay int `json:"periodStartDay"`
 
-	// LargeAmount is the threshold, in base minor units, above which a
-	// transaction counts as large for alerts. Zero switches the check off.
-	LargeAmount int64 `json:"largeAmount"`
+	// LargeAmount is the threshold above which a transaction counts as large
+	// for alerts, in minor units of LargeAmountCurrency, which is the base
+	// it was typed in. Zero switches the check off.
+	LargeAmount         int64  `json:"largeAmount"`
+	LargeAmountCurrency string `json:"largeAmountCurrency,omitempty"`
 
 	// Monitoring is the master switch for alert evaluation. Nil reads as on.
 	Monitoring *bool `json:"monitoring,omitempty"`
@@ -91,6 +95,13 @@ func (c *Config) defaults() {
 	}
 	if c.PeriodStartDay < 1 || c.PeriodStartDay > 28 {
 		c.PeriodStartDay = 1
+	}
+	// Version 2 records which currency the large amount was typed in. Before
+	// it the base could not change, so that was the base. This runs once:
+	// the base moves freely from here on and must not be read back into it.
+	if c.Version < 2 {
+		c.LargeAmountCurrency = c.BaseCurrency
+		c.Version = 2
 	}
 }
 

@@ -33,7 +33,7 @@ PLUGIN_DIRS := views charts components
 # preview.png is generated, so it is copied only when it exists.
 PREVIEW := $(wildcard preview.png)
 
-.PHONY: all build test verify clean install install-check
+.PHONY: all build test validate verify clean install install-check
 
 all: build
 
@@ -47,8 +47,14 @@ build: verify
 	@echo "built. next:"
 	@echo "  ./bin/omabudget health"
 
+# The race detector needs cgo, so the tests turn it back on for themselves.
 test:
-	$(GO) test -race ./...
+	CGO_ENABLED=1 $(GO) test -race ./...
+
+# The gate every change passes before it lands: vet, then the race suite.
+validate:
+	$(GO) vet ./...
+	CGO_ENABLED=1 $(GO) test -race ./...
 
 # Omarchy refuses symlinks inside a plugin folder, so installing copies.
 install: build

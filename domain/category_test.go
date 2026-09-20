@@ -290,7 +290,7 @@ func TestRemoveCategory(t *testing.T) {
 	held(t, fuel.ID, "has a split line")
 
 	// A budget line holds one.
-	if err := l.SetBudget(ctx, "Clothing & footwear", "2026-09", 10000); err != nil {
+	if err := l.SetBudget(ctx, "Clothing & footwear", "2026-09", 10000, ""); err != nil {
 		t.Fatal(err)
 	}
 	held(t, "Clothing & footwear", "has a budget line")

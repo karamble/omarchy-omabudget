@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
+
+	"github.com/karamble/omarchy-omabudget/money"
 )
 
 // ---- categories by id
@@ -138,19 +141,18 @@ func (l *Ledger) Budgets(ctx context.Context, periodKey, from, to string) (Budge
 		return Budget{}, err
 	}
 
-	rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned FROM budgets WHERE period=?`, periodKey)
+	lines, err := l.budgetLines(ctx, periodKey)
 	if err != nil {
 		return Budget{}, err
 	}
-	defer rows.Close()
+	planned, err := l.plannedInReference(ctx, lines)
+	if err != nil {
+		return Budget{}, err
+	}
 	b := Budget{Period: periodKey, Cards: []BudgetCard{}, Unbudgeted: []BudgetCard{}}
 	budgeted := map[string]bool{}
-	for rows.Next() {
-		var id string
-		var planned int64
-		if err := rows.Scan(&id, &planned); err != nil {
-			return Budget{}, err
-		}
+	for _, ln := range lines {
+		id := ln.CategoryID
 		c, ok := index[id]
 		if !ok {
 			continue
@@ -158,16 +160,13 @@ func (l *Ledger) Budgets(ctx context.Context, periodKey, from, to string) (Budge
 		budgeted[id] = true
 		card := BudgetCard{
 			CategoryID: id, Name: c.Name, Icon: index.Icon(id),
-			Planned: planned, Spent: spent[id], Remaining: planned - spent[id],
-			Pct: pct(spent[id], planned),
+			Planned: planned[id], Spent: spent[id], Remaining: planned[id] - spent[id],
+			Pct: pct(spent[id], planned[id]),
 		}
 		card.State = budgetState(card.Spent, card.Planned)
 		b.Planned += card.Planned
 		b.Spent += card.Spent
 		b.Cards = append(b.Cards, card)
-	}
-	if err := rows.Err(); err != nil {
-		return Budget{}, err
 	}
 	b.Pct = pct(b.Spent, b.Planned)
 	slices.SortFunc(b.Cards, func(a, c BudgetCard) int {
@@ -215,6 +214,65 @@ func (l *Ledger) spentTree(ctx context.Context, from, to string, skipFlagged boo
 	return spent, spending, index, nil
 }
 
+// budgetLine is one row of the budgets table: the plan as typed, in its own
+// currency, and the carry, which is always in the reference.
+type budgetLine struct {
+	CategoryID string
+	Planned    int64
+	Currency   string
+	RolloverIn int64
+}
+
+// budgetLines reads a period's plan. The cursor is drained before returning,
+// since the ledger has one connection.
+func (l *Ledger) budgetLines(ctx context.Context, periodKey string) ([]budgetLine, error) {
+	rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned, currency, rollover_in FROM budgets WHERE period=?`, periodKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []budgetLine
+	for rows.Next() {
+		var ln budgetLine
+		if err := rows.Scan(&ln.CategoryID, &ln.Planned, &ln.Currency, &ln.RolloverIn); err != nil {
+			return nil, err
+		}
+		// A line written without a currency is in the reference.
+		if ln.Currency == "" {
+			ln.Currency = l.reference
+		}
+		out = append(out, ln)
+	}
+	return out, rows.Err()
+}
+
+// plannedInReference is each line's plan in the reference at today's rate,
+// keyed by category, which is the only form it can be held against spending
+// in. A plan in the reference is returned as it is. A currency with no rate
+// on file is refused rather than counted as nothing.
+func (l *Ledger) plannedInReference(ctx context.Context, lines []budgetLine) (map[string]int64, error) {
+	out := make(map[string]int64, len(lines))
+	rates := map[string]money.Rate{l.reference: "1"}
+	for _, ln := range lines {
+		if _, seen := rates[ln.Currency]; !seen {
+			rate, ok, err := l.RateOn(ctx, ln.Currency, "")
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, fmt.Errorf("%s is planned in %s and no %s rate is on file", ln.CategoryID, ln.Currency, ln.Currency)
+			}
+			rates[ln.Currency] = rate
+		}
+		v, ok := ToReference(ln.Planned, ln.Currency, l.reference, rates)
+		if !ok {
+			return nil, fmt.Errorf("%s: the %s plan cannot be read in %s", ln.CategoryID, ln.Currency, l.reference)
+		}
+		out[ln.CategoryID] = v
+	}
+	return out, nil
+}
+
 // ---- budget helpers, spec 5.5
 
 // CopyBudget files the plan under fromKey again under toKey, line for line,
@@ -229,29 +287,12 @@ func (l *Ledger) CopyBudget(ctx context.Context, fromKey, toKey string) (int, er
 	if fromKey == toKey {
 		return 0, errors.New("copying a period onto itself changes nothing")
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned FROM budgets WHERE period=?`, fromKey)
+	lines, err := l.budgetLines(ctx, fromKey)
 	if err != nil {
 		return 0, err
 	}
-	type line struct {
-		id      string
-		planned int64
-	}
-	var lines []line
-	for rows.Next() {
-		var ln line
-		if err := rows.Scan(&ln.id, &ln.planned); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		lines = append(lines, ln)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
 	for _, ln := range lines {
-		if err := l.SetBudget(ctx, ln.id, toKey, ln.planned); err != nil {
+		if err := l.SetBudget(ctx, ln.CategoryID, toKey, ln.Planned, ln.Currency); err != nil {
 			return 0, err
 		}
 	}
@@ -266,8 +307,9 @@ const (
 
 // PlanFromHistory sets the plan under key to the average or the median of
 // what was spent over the given past ranges, for one category or for every
-// category already planned under key. Categories that spent nothing in any
-// range keep their line at zero and are removed.
+// category already planned under key. Spending is summed in the reference,
+// so the line is filed in it. Categories that spent nothing in any range
+// keep their line at zero and are removed.
 func (l *Ledger) PlanFromHistory(ctx context.Context, key string, ranges [][2]string, method, categoryRef string) (int, error) {
 	if err := checkPeriodKey(key); err != nil {
 		return 0, err
@@ -333,7 +375,7 @@ func (l *Ledger) PlanFromHistory(ctx context.Context, key string, ranges [][2]st
 				planned = roundDiv(values[mid-1]+values[mid], 2)
 			}
 		}
-		if err := l.SetBudget(ctx, id, key, planned); err != nil {
+		if err := l.SetBudget(ctx, id, key, planned, l.reference); err != nil {
 			return n, err
 		}
 		n++
@@ -342,7 +384,8 @@ func (l *Ledger) PlanFromHistory(ctx context.Context, key string, ranges [][2]st
 }
 
 // ScaleBudget multiplies every line under key by (100+percent)/100, rounded
-// half away from zero, and reports how many lines changed.
+// half away from zero in the line's own currency, and reports how many lines
+// changed.
 func (l *Ledger) ScaleBudget(ctx context.Context, key string, percent int) (int, error) {
 	if err := checkPeriodKey(key); err != nil {
 		return 0, err
@@ -350,30 +393,17 @@ func (l *Ledger) ScaleBudget(ctx context.Context, key string, percent int) (int,
 	if percent <= -100 || percent > 1000 {
 		return 0, fmt.Errorf("scale %d%% is out of range", percent)
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned FROM budgets WHERE period=?`, key)
+	lines, err := l.budgetLines(ctx, key)
 	if err != nil {
 		return 0, err
 	}
-	changes := map[string]int64{}
-	for rows.Next() {
-		var id string
-		var planned int64
-		if err := rows.Scan(&id, &planned); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		changes[id] = roundDiv(planned*int64(100+percent), 100)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	for id, planned := range changes {
-		if err := l.SetBudget(ctx, id, key, planned); err != nil {
+	for _, ln := range lines {
+		scaled := roundDiv(ln.Planned*int64(100+percent), 100)
+		if err := l.SetBudget(ctx, ln.CategoryID, key, scaled, ln.Currency); err != nil {
 			return 0, err
 		}
 	}
-	return len(changes), nil
+	return len(lines), nil
 }
 
 // roundDiv divides rounding half away from zero.
@@ -394,16 +424,29 @@ func roundDiv(a, b int64) int64 {
 	return q
 }
 
-// SetBudget files planned base-currency minor units for a category under
-// periodKey, replacing any earlier figure. Zero removes the line. Only an
-// expense category that is neither archived nor a system marker can be
-// budgeted.
-func (l *Ledger) SetBudget(ctx context.Context, categoryRef, periodKey string, planned int64) error {
+// SetBudget files planned minor units of currency for a category under
+// periodKey, replacing any earlier figure. An empty currency is the
+// reference; any other needs a rate on file, or the plan could not be held
+// against spending. Zero removes the line. Only an expense category that is
+// neither archived nor a system marker can be budgeted.
+func (l *Ledger) SetBudget(ctx context.Context, categoryRef, periodKey string, planned int64, currency string) error {
 	if planned < 0 {
 		return errors.New("a budget cannot be negative")
 	}
 	if err := checkPeriodKey(periodKey); err != nil {
 		return err
+	}
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "" {
+		currency = l.reference
+	}
+	if len(currency) != 3 {
+		return fmt.Errorf("currency %q must be a three-letter code", currency)
+	}
+	if _, ok, err := l.RateOn(ctx, currency, ""); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("no %s rate on file: a plan in %s cannot be held against spending", currency, currency)
 	}
 	c, err := l.Category(ctx, categoryRef)
 	if err != nil {
@@ -426,9 +469,9 @@ func (l *Ledger) SetBudget(ctx context.Context, categoryRef, periodKey string, p
 		_, err := l.db.ExecContext(ctx, `UPDATE budgets SET planned=0 WHERE category_id=? AND period=?`, c.ID, periodKey)
 		return err
 	}
-	_, err = l.db.ExecContext(ctx, `INSERT INTO budgets (id,category_id,period,planned) VALUES (?,?,?,?)
-		ON CONFLICT(category_id,period) DO UPDATE SET planned=excluded.planned`,
-		newID(), c.ID, periodKey, planned)
+	_, err = l.db.ExecContext(ctx, `INSERT INTO budgets (id,category_id,period,planned,currency) VALUES (?,?,?,?,?)
+		ON CONFLICT(category_id,period) DO UPDATE SET planned=excluded.planned, currency=excluded.currency`,
+		newID(), c.ID, periodKey, planned, currency)
 	return err
 }
 
@@ -438,14 +481,6 @@ func checkPeriodKey(key string) error {
 		return fmt.Errorf("period %q must be YYYY-MM", key)
 	}
 	return nil
-}
-
-// pct is spent as a whole percentage of planned, 0 when nothing is planned.
-func pct(spent, planned int64) int {
-	if planned <= 0 {
-		return 0
-	}
-	return int(spent * 100 / planned)
 }
 
 func budgetState(spent, planned int64) string {

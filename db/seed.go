@@ -112,7 +112,7 @@ func slug(s string) string {
 
 // seedCategories loads the default taxonomy. INSERT OR IGNORE, keyed on the
 // slug id, so running it again adds nothing and changes nothing.
-func seedCategories(ctx context.Context, tx *sql.Tx) error {
+func seedCategories(ctx context.Context, tx *sql.Tx, _ Options) error {
 	ins, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO categories
 		(id, name, parent_id, kind, icon, is_system, default_budget_behaviour, exclude_from_statistics, sort_order)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)

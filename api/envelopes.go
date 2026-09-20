@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -21,12 +22,26 @@ func (s *Server) handleEnvelopes(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	e, err := l.Envelopes(r.Context(), sp.key(), sp.from(), sp.to())
+	e, err := s.envelopes(r.Context(), l, sp)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	writeJSON(w, s.logger, http.StatusOK, e)
+}
+
+// envelopes is the period's pots shown in the base.
+func (s *Server) envelopes(ctx context.Context, l *domain.Ledger, sp span) (domain.Envelopes, error) {
+	e, err := l.Envelopes(ctx, sp.key(), sp.from(), sp.to())
+	if err != nil {
+		return domain.Envelopes{}, err
+	}
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		return domain.Envelopes{}, err
+	}
+	e = v.envelopes(e)
+	return e, v.done()
 }
 
 // handleRollover closes one period into the next: from defaults to the
@@ -60,7 +75,7 @@ func (s *Server) handleRollover(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	e, err := l.Envelopes(r.Context(), to.key(), to.from(), to.to())
+	e, err := s.envelopes(r.Context(), l, to)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -152,13 +167,24 @@ func (s *Server) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
 	if in.GoalTarget != nil {
-		target, err := money.Parse(*in.GoalTarget, l.Base())
+		// Typed in the base, kept in the reference like the pot it measures.
+		typed, err := money.Parse(*in.GoalTarget, v.base)
 		if err != nil && !errors.Is(err, money.ErrZero) {
 			s.fail(w, err)
 			return
 		}
-		if c, err = l.SetCategoryGoal(ctx, c.ID, target.Minor, in.GoalDue); err != nil {
+		target, err := v.toReference(typed.Minor)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		if c, err = l.SetCategoryGoal(ctx, c.ID, target, in.GoalDue); err != nil {
 			s.fail(w, err)
 			return
 		}
@@ -168,6 +194,11 @@ func (s *Server) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, err)
 			return
 		}
+	}
+	c.GoalTarget = v.amount(c.GoalTarget)
+	if err := v.done(); err != nil {
+		s.fail(w, err)
+		return
 	}
 	writeJSON(w, s.logger, http.StatusOK, c)
 }
@@ -185,31 +216,64 @@ func (s *Server) handleRemoveCategory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.logger, http.StatusOK, map[string]string{"removed": id})
 }
 
-// settingsOut is what the app may change at runtime.
+// settingsOut is what the app may change at runtime. The base is what
+// figures are shown in; the rate reference is what the ledger keeps them in
+// and quotes every rate against. The large amount is shown in the base.
 type settingsOut struct {
 	BaseCurrency   string `json:"baseCurrency"`
+	RateReference  string `json:"rateReference"`
 	Model          string `json:"model"`
 	PeriodStartDay int    `json:"periodStartDay"`
 	LargeAmount    int64  `json:"largeAmount"`
 	Monitoring     bool   `json:"monitoring"`
 }
 
-func (s *Server) settings() settingsOut {
+// settings reads the configuration for the app. The large amount was typed in
+// whatever the base was then and is shown in the base now; when its currency
+// has lost its rate it is shown as typed.
+func (s *Server) settings(ctx context.Context) (settingsOut, error) {
 	c := s.Config()
-	return settingsOut{
-		BaseCurrency: c.BaseCurrency, Model: string(c.Model), PeriodStartDay: c.PeriodStartDay,
-		LargeAmount: c.LargeAmount, Monitoring: c.MonitoringOn(),
+	out := settingsOut{
+		BaseCurrency: c.BaseCurrency, RateReference: c.BaseCurrency, Model: string(c.Model),
+		PeriodStartDay: c.PeriodStartDay, LargeAmount: c.LargeAmount, Monitoring: c.MonitoringOn(),
 	}
+	l := s.Ledger()
+	if l == nil {
+		return out, nil
+	}
+	out.RateReference = l.Reference()
+	typedIn := c.LargeAmountCurrency
+	if typedIn == "" {
+		typedIn = c.BaseCurrency
+	}
+	if c.LargeAmount == 0 || typedIn == c.BaseCurrency {
+		return out, nil
+	}
+	ref, ok, err := inReference(ctx, l, c.LargeAmount, typedIn)
+	if err != nil || !ok {
+		return out, err
+	}
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		return out, err
+	}
+	out.LargeAmount = v.amount(ref)
+	return out, v.done()
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.logger, http.StatusOK, s.settings())
+	out, err := s.settings(r.Context())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, out)
 }
 
-// settingsIn changes only the fields it carries. The base currency is not
-// here: base amounts are frozen at entry, so it is fixed once the ledger
-// has postings.
+// settingsIn changes only the fields it carries. The base currency is any
+// three-letter code that is the rate reference or has a rate on file.
 type settingsIn struct {
+	BaseCurrency   *string `json:"baseCurrency"`
 	Model          *string `json:"model"`
 	PeriodStartDay *int    `json:"periodStartDay"`
 	LargeAmount    *string `json:"largeAmount"`
@@ -220,9 +284,27 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &in) {
 		return
 	}
+	ctx := r.Context()
+	base := ""
+	if in.BaseCurrency != nil {
+		l, ok := s.ledgerOr(w)
+		if !ok {
+			return
+		}
+		code, err := checkBase(ctx, l, *in.BaseCurrency)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		base = code
+	}
 	var large *int64
 	if in.LargeAmount != nil {
-		v, err := money.Parse(*in.LargeAmount, s.Config().BaseCurrency)
+		typedIn := s.Config().BaseCurrency
+		if base != "" {
+			typedIn = base
+		}
+		v, err := money.Parse(*in.LargeAmount, typedIn)
 		if err != nil && !errors.Is(err, money.ErrZero) {
 			s.fail(w, err)
 			return
@@ -233,6 +315,9 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		large = &v.Minor
 	}
 	err := s.mutate(func(c *config.Config) error {
+		if base != "" {
+			c.BaseCurrency = base
+		}
 		if in.Model != nil {
 			m := config.Model(strings.ToLower(*in.Model))
 			if m != config.ModelLimits && m != config.ModelEnvelope {
@@ -247,7 +332,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 			c.PeriodStartDay = *in.PeriodStartDay
 		}
 		if large != nil {
-			c.LargeAmount = *large
+			c.LargeAmount, c.LargeAmountCurrency = *large, c.BaseCurrency
 		}
 		return nil
 	})
@@ -255,5 +340,10 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	writeJSON(w, s.logger, http.StatusOK, s.settings())
+	out, err := s.settings(ctx)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, out)
 }

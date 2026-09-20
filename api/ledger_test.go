@@ -22,12 +22,12 @@ import (
 // startDay, with the clock pinned to 2026-09-13.
 func newTestServer(t *testing.T, startDay int) (*Server, *domain.Ledger) {
 	t.Helper()
-	d, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "ledger.db"))
+	d, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "ledger.db"), db.Options{RateReference: "EUR"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { d.Close() })
-	l := domain.New(d, "EUR")
+	l := domain.New(d)
 	cfg := &config.Config{BaseCurrency: "EUR", PeriodStartDay: startDay, APIToken: "test-token"}
 	// A test config saves into the temp dir, never the real one.
 	cfg.SetPath(filepath.Join(t.TempDir(), "config.json"))

@@ -121,13 +121,18 @@ Item {
                                           : Qt.formatDate(new Date(), "yyyy-MM-dd")
   }
 
+  // The currency every rate is quoted against and every figure is kept in.
+  // Figures are shown in snap.baseCurrency, which may differ from it.
+  readonly property string rateReference: root.snap && root.snap.rateReference ? String(root.snap.rateReference)
+    : (root.snap && root.snap.baseCurrency ? String(root.snap.baseCurrency) : "")
+
   // The rate a new entry would freeze at, spec 8: the latest one filed on or
   // before the date, and nothing at all when there is none. That is the
   // ledger's rule for an entry, which refuses rather than reaching forward to
-  // a later rate.
+  // a later rate. A rate is against the reference, not the currency shown.
   function rateFor(currency, date) {
-    if (!currency || !root.snap || !root.snap.baseCurrency) return null
-    if (currency === root.snap.baseCurrency) return { rate: "1", date: date }
+    if (!currency || root.rateReference === "") return null
+    if (currency === root.rateReference) return { rate: "1", date: date }
     var list = root.snap.rates ? root.snap.rates : []
     var on = date && date !== "" ? date : root.today()
     for (var i = 0; i < list.length; i++)
@@ -369,12 +374,12 @@ Item {
   }
 
   // ---- money rendering
+  // Minor-unit digits per currency, as the daemon serves them with the
+  // dashboard for every currency in play; two until it has.
   function decimalsFor(c) {
-    switch (String(c || "").toUpperCase()) {
-    case "JPY": case "KRW": case "HUF": case "ISK": return 0
-    case "BTC": case "DCR": case "LTC": return 8
-    }
-    return 2
+    var table = root.snap && root.snap.decimals ? root.snap.decimals : null
+    var d = table ? table[String(c || "").toUpperCase()] : undefined
+    return d !== undefined && d !== null ? Number(d) : 2
   }
 
   // fmt renders minor units with thousands separators, or a placeholder when

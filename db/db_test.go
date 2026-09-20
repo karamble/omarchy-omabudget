@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +13,7 @@ import (
 func openTemp(t *testing.T) (*DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "omabudget", "ledger.db")
-	d, err := Open(context.Background(), path)
+	d, err := Open(context.Background(), path, Options{RateReference: "EUR"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +33,7 @@ func TestOpenMigratesToLatest(t *testing.T) {
 
 	for _, table := range []string{
 		"accounts", "categories", "payees", "payee_aliases", "tags", "transactions",
-		"splits", "transaction_tags", "split_tags", "budgets", "recurring_rules", "fx_rates",
+		"splits", "transaction_tags", "split_tags", "budgets", "recurring_rules", "fx_rates", "meta",
 	} {
 		var name string
 		err := d.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
@@ -92,7 +94,7 @@ func TestSeedIsIdempotent(t *testing.T) {
 	}
 	d.Close()
 
-	again, err := Open(context.Background(), path)
+	again, err := Open(context.Background(), path, Options{RateReference: "EUR"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,5 +214,224 @@ func TestSeededTaxonomy(t *testing.T) {
 	}
 	if target != 0 || due != "" {
 		t.Errorf("goal defaults are %d %q", target, due)
+	}
+}
+
+// TestRateReferenceIsPinned: the reference is written once, from the option
+// given at the first open, and the ledger's own record wins on every open
+// after that.
+func TestRateReferenceIsPinned(t *testing.T) {
+	ctx := context.Background()
+	d, path := openTemp(t)
+	if got := d.RateReference(); got != "EUR" {
+		t.Fatalf("reference = %q, want EUR", got)
+	}
+	d.Close()
+
+	again, err := Open(ctx, path, Options{RateReference: "PLN"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	if got := again.RateReference(); got != "EUR" {
+		t.Errorf("reopening under another base moved the reference to %q", got)
+	}
+	if v, err := again.Meta(ctx, MetaRateReference); err != nil || v != "EUR" {
+		t.Errorf("meta %s = %q, %v", MetaRateReference, v, err)
+	}
+	if _, err := again.Meta(ctx, "no-such-key"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing key err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestRateReferenceIsRequired: a fresh ledger cannot be brought to version 2
+// without knowing what its rates are quoted against.
+func TestRateReferenceIsRequired(t *testing.T) {
+	for _, ref := range []string{"", "EU", "euro"} {
+		path := filepath.Join(t.TempDir(), "ledger.db")
+		d, err := Open(context.Background(), path, Options{RateReference: ref})
+		if err == nil {
+			d.Close()
+			t.Errorf("reference %q was accepted", ref)
+		}
+	}
+}
+
+// TestRefusesNewerSchema: a ledger written by a later build is refused rather
+// than opened and misread.
+func TestRefusesNewerSchema(t *testing.T) {
+	ctx := context.Background()
+	d, path := openTemp(t)
+	newest := migrations[len(migrations)-1].version
+	if _, err := d.ExecContext(ctx,
+		`INSERT INTO schema_migrations (version, applied_at) VALUES (?, '2030-01-01T00:00:00Z')`, newest+1); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+
+	again, err := Open(ctx, path, Options{RateReference: "EUR"})
+	if err == nil {
+		again.Close()
+		t.Fatal("a newer ledger was opened")
+	}
+	if !errors.Is(err, ErrSchemaTooNew) {
+		t.Errorf("err = %v, want ErrSchemaTooNew", err)
+	}
+}
+
+// TestPreRunsOutsideTransaction: the pre hook sees the bare connection, so
+// it can do what a transaction forbids, and it runs before the statements.
+func TestPreRunsOutsideTransaction(t *testing.T) {
+	ctx := context.Background()
+	d, _ := openTemp(t)
+	snapshot := filepath.Join(t.TempDir(), "snapshot.db")
+	var order []string
+	m := migration{
+		version: 99,
+		name:    "probe",
+		pre: func(ctx context.Context, d *DB) error {
+			order = append(order, "pre")
+			// VACUUM INTO fails inside a transaction.
+			return d.SnapshotInto(ctx, snapshot)
+		},
+		statements: []string{`CREATE TABLE probe (n INTEGER)`},
+		after: func(ctx context.Context, tx *sql.Tx, opts Options) error {
+			order = append(order, "after "+opts.RateReference)
+			_, err := tx.ExecContext(ctx, `INSERT INTO probe (n) VALUES (1)`)
+			return err
+		},
+	}
+	if err := d.apply(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"pre", "after EUR"}; strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("hooks ran as %v, want %v", order, want)
+	}
+	if _, err := os.Stat(snapshot); err != nil {
+		t.Errorf("pre did not write the snapshot: %v", err)
+	}
+	if v, err := d.Version(ctx); err != nil || v != 99 {
+		t.Errorf("version = %d, %v; want 99", v, err)
+	}
+}
+
+// TestFailedAfterRollsBack: a hook that fails leaves the ledger at the
+// version before, with none of the migration's statements applied.
+func TestFailedAfterRollsBack(t *testing.T) {
+	ctx := context.Background()
+	d, _ := openTemp(t)
+	before, _ := d.Version(ctx)
+	m := migration{
+		version:    99,
+		name:       "broken",
+		statements: []string{`CREATE TABLE probe (n INTEGER)`},
+		after: func(ctx context.Context, tx *sql.Tx, _ Options) error {
+			return errors.New("no")
+		},
+	}
+	if err := d.apply(ctx, m); err == nil {
+		t.Fatal("a failing hook was applied")
+	}
+	if v, _ := d.Version(ctx); v != before {
+		t.Errorf("version moved to %d", v)
+	}
+	var name string
+	if err := d.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE name='probe'`).Scan(&name); err == nil {
+		t.Error("the table from a rolled back migration is still there")
+	}
+}
+
+// TestBlankDerivedRates: bringing a version 2 ledger forward clears the rate
+// on every row that agrees with the table for its date, comparing as
+// numbers, and on every row in the reference currency; a rate the table did
+// not have stays on its row.
+func TestBlankDerivedRates(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "ledger.db")
+	old, err := connect(path, Options{RateReference: "EUR"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.migrateTo(ctx, 2); err != nil {
+		t.Fatal(err)
+	}
+	now := "2026-09-13T00:00:00Z"
+	mustExec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := old.ExecContext(ctx, q, args...); err != nil {
+			t.Fatalf("%v\n%s", err, q)
+		}
+	}
+	mustExec(`INSERT INTO accounts (id,name,type,currency,opening_date,created_at,modified_at) VALUES ('a','Main','checking','EUR','2026-01-01',?,?)`, now, now)
+	mustExec(`INSERT INTO fx_rates (date,currency,rate) VALUES ('2026-01-01','PLN','0.235'), ('2026-03-01','PLN','0.24')`)
+	for _, r := range []struct{ id, date, currency, rate string }{
+		{"same", "2026-02-01", "PLN", "0.235"},
+		{"same-zeros", "2026-02-01", "PLN", "0.2350"},
+		{"typed", "2026-02-01", "PLN", "0.232"},
+		{"later", "2026-03-05", "PLN", "0.24"},
+		{"reference", "2026-02-01", "EUR", "1"},
+		{"unquoted", "2026-02-01", "USD", "0.9"},
+		{"before-first", "2025-12-01", "PLN", "0.235"},
+	} {
+		mustExec(`INSERT INTO transactions (id,kind,date,amount,currency,fx_rate,base_amount,account_id,category_id,created_at,modified_at)
+			VALUES (?,'expense',?,-100,?,?,-23,'a','food/groceries',?,?)`, r.id, r.date, r.currency, r.rate, now, now)
+	}
+	old.Close()
+
+	d, err := Open(ctx, path, Options{RateReference: "EUR"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	want := map[string]string{
+		"same": "", "same-zeros": "", "typed": "0.232", "later": "",
+		"reference": "", "unquoted": "0.9", "before-first": "",
+	}
+	for id, rate := range want {
+		var got string
+		if err := d.QueryRowContext(ctx, `SELECT fx_rate FROM transactions WHERE id=?`, id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != rate {
+			t.Errorf("%s has rate %q, want %q", id, got, rate)
+		}
+	}
+}
+
+// TestFillBudgetCurrency: bringing a version 3 ledger forward stamps every
+// budget line with the reference, and a line filed afterwards keeps the
+// currency it is given.
+func TestFillBudgetCurrency(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "ledger.db")
+	old, err := connect(path, Options{RateReference: "EUR"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.migrateTo(ctx, 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.ExecContext(ctx, `INSERT INTO budgets (id,category_id,period,planned) VALUES ('b1','food/groceries','2026-09',30000)`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+
+	d, err := Open(ctx, path, Options{RateReference: "EUR"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	var currency string
+	if err := d.QueryRowContext(ctx, `SELECT currency FROM budgets WHERE id='b1'`).Scan(&currency); err != nil {
+		t.Fatal(err)
+	}
+	if currency != "EUR" {
+		t.Errorf("backfilled currency = %q, want EUR", currency)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO budgets (id,category_id,period,planned,currency) VALUES ('b2','food/groceries','2026-10',40000,'PLN')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.QueryRowContext(ctx, `SELECT currency FROM budgets WHERE id='b2'`).Scan(&currency); err != nil || currency != "PLN" {
+		t.Errorf("filed currency = %q, %v; want PLN", currency, err)
 	}
 }

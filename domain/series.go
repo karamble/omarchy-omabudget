@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 )
@@ -54,9 +53,7 @@ func (l *Ledger) Totals(ctx context.Context, from, to string) (Totals, error) {
 		return Totals{}, err
 	}
 	t.Net = t.Income - t.Expense
-	if t.Income > 0 {
-		t.SavingsRate = int(t.Net * 100 / t.Income)
-	}
+	t.SavingsRate = pct(t.Net, t.Income)
 	return t, nil
 }
 
@@ -80,7 +77,7 @@ type CashSeries struct {
 }
 
 // LiquidSeries is end-of-day liquid funds for every day from from to to
-// inclusive: liquid accounts in the base currency, each opening balance
+// inclusive: liquid accounts in the reference currency, each opening balance
 // counted from its opening date, every posting dated on or before the day.
 // Balance is undated, so the last point is what the accounts hold less
 // anything dated after to.
@@ -113,7 +110,7 @@ func (l *Ledger) LiquidSeries(ctx context.Context, from, to string) (CashSeries,
 		liquid[a.ID] = true
 		currency[a.ID] = a.Currency
 		ids = append(ids, a.ID)
-		if v, ok := InBase(a.OpeningBalance, a.Currency, l.base, rates); ok {
+		if v, ok := ToReference(a.OpeningBalance, a.Currency, l.reference, rates); ok {
 			byDay[a.OpeningDate] += v
 		}
 	}
@@ -138,7 +135,7 @@ func (l *Ledger) LiquidSeries(ctx context.Context, from, to string) (CashSeries,
 				return CashSeries{}, err
 			}
 			if liquid[account] {
-				if v, ok := InBase(amount, currency[account], l.base, rates); ok {
+				if v, ok := ToReference(amount, currency[account], l.reference, rates); ok {
 					byDay[date] += v
 				}
 			}
@@ -147,7 +144,7 @@ func (l *Ledger) LiquidSeries(ctx context.Context, from, to string) (CashSeries,
 				if counterAmount.Valid {
 					leg = counterAmount.Int64
 				}
-				if v, ok := InBase(leg, currency[counter], l.base, rates); ok {
+				if v, ok := ToReference(leg, currency[counter], l.reference, rates); ok {
 					byDay[date] += v
 				}
 			}
@@ -171,13 +168,7 @@ func (l *Ledger) LiquidSeries(ctx context.Context, from, to string) (CashSeries,
 		c.Series = append(c.Series, CashPoint{Date: date, Liquid: running})
 	}
 	c.Delta = running - before
-	if before != 0 {
-		pct := math.Round(float64(c.Delta)*1000/math.Abs(float64(before))) / 10
-		if pct == 0 {
-			pct = 0 // a drop that rounds away is not minus zero
-		}
-		c.DeltaPct = &pct
-	}
+	c.DeltaPct = deltaPct(c.Delta, before)
 	return c, nil
 }
 

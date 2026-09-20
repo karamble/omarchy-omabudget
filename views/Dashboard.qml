@@ -24,6 +24,8 @@ Item {
   readonly property var recent: snap && snap.recent && snap.recent.length !== undefined ? snap.recent : []
   readonly property var bills: snap && snap.bills && snap.bills.length !== undefined ? snap.bills : []
   readonly property var insights: snap && snap.insights && snap.insights.length !== undefined ? snap.insights : []
+  // Currencies with no rate on file, left out of cash on hand and net worth.
+  readonly property var unconverted: snap && snap.unconverted && snap.unconverted.length !== undefined ? snap.unconverted : []
   readonly property string cur: snap && snap.baseCurrency ? String(snap.baseCurrency) : ""
 
   readonly property real planned: budget ? Number(budget.planned) || 0 : 0
@@ -1045,6 +1047,15 @@ Item {
                     color: acct.modelData.balance < 0 ? view.expense : view.fg
                   }
                 }
+              }
+              Note {
+                visible: view.unconverted.length > 0
+                width: parent.width
+                wrapMode: Text.WordWrap
+                text: "No rate on file for " + view.unconverted.join(", ")
+                  + ": left out of cash on hand and net worth. Add one under Manage, Rates."
+                color: view.app ? view.app.urgent : view.fg
+                topPadding: Style.space(4)
               }
             }
           }

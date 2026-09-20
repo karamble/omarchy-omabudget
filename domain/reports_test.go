@@ -15,7 +15,7 @@ func TestSpendingReport(t *testing.T) {
 	spend(t, l, a, "Fuel", "2026-08-07", 5000)
 	spend(t, l, a, "Groceries", "2026-09-05", 45000)
 	spend(t, l, a, "Rent", "2026-09-03", 100000)
-	if err := l.SetBudget(ctx, "Food", "2026-09", 40000); err != nil {
+	if err := l.SetBudget(ctx, "Food", "2026-09", 40000, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -30,7 +30,7 @@ func TestSpendingReport(t *testing.T) {
 		t.Fatalf("%+v", rep.Rows)
 	}
 	food := rep.Rows[1]
-	if food.Spent != 45000 || food.Previous != 31000 || food.Share != 31 || food.Delta != 14000 || food.DeltaPct == nil || *food.DeltaPct != 45.1 || food.Planned != 40000 {
+	if food.Spent != 45000 || food.Previous != 31000 || food.Share != 31 || food.Delta != 14000 || food.DeltaPct == nil || *food.DeltaPct != 45.2 || food.Planned != 40000 {
 		t.Fatalf("%+v", food)
 	}
 	if len(food.Children) != 2 || food.Children[0].Name != "Groceries" || food.Children[1].Name != "Coffee & snacks" || food.Children[1].Spent != 0 {
@@ -140,5 +140,36 @@ func TestJournalAndCSV(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(c), "\n")
 	if len(lines) != 5 || !strings.HasPrefix(lines[0], "id,date,kind,amount") || !strings.Contains(lines[1], "2026-09-02,expense,-4.50,EUR,-4.50,House Bank,,Coffee & snacks,Coffee,,cleared,work") {
 		t.Fatalf("csv:\n%s", c)
+	}
+}
+
+// TestMetricsCountForeignBills: a bill in another currency counts toward what
+// is still due at the rate on file, and one with no rate counts nowhere.
+func TestMetricsCountForeignBills(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+	a := mustAccount(t, l, "Main", Checking, "EUR", 900000)
+	zloty := mustAccount(t, l, "Zloty", Checking, "PLN", 0)
+	dollars := mustAccount(t, l, "Dollars", Checking, "USD", 0)
+	if _, err := l.SetRate(ctx, "PLN", "0.25", "2026-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	spend(t, l, a, "Groceries", "2026-09-05", 4000)
+	for _, r := range []struct {
+		name    string
+		account Account
+		amount  int64
+	}{{"Gym", a, 2990}, {"Phone", zloty, 4000}, {"Stream", dollars, 1000}} {
+		if _, err := l.AddRule(ctx, Rule{Name: r.name, Template: Template{Kind: Expense, AccountID: r.account.ID, Amount: r.amount, CategoryID: "Internet"}, Frequency: "monthly", StartDate: "2026-09-20"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m, err := l.Metrics(ctx, "2026-09-01", "2026-09-30", 30, 14, "2026-09-14", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 29.90 EUR plus 40 PLN at a quarter; the dollars have no rate.
+	if m.RecurringDue != 2990+1000 {
+		t.Fatalf("recurring due %d, want 3990", m.RecurringDue)
 	}
 }

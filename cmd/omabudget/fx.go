@@ -63,14 +63,14 @@ func runRateList(args []string) error {
 		fmt.Println("no rates yet: omabudget rate set <currency> <rate>")
 		return nil
 	}
-	base, err := baseCurrency(ctx, cl)
+	_, reference, err := currencies(ctx, cl)
 	if err != nil {
 		return err
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintf(tw, "DATE\tCURRENCY\tRATE\n")
 	for _, r := range list {
-		fmt.Fprintf(tw, "%s\t%s\t1 %s = %s %s\n", r.Date, r.Currency, r.Currency, r.Rate, base)
+		fmt.Fprintf(tw, "%s\t%s\t1 %s = %s %s\n", r.Date, r.Currency, r.Currency, r.Rate, reference)
 	}
 	return tw.Flush()
 }
@@ -101,8 +101,11 @@ func runRateSet(args []string) error {
 	if c.json {
 		return client.PrintJSON(out)
 	}
-	base, _ := baseCurrency(ctx, cl)
-	fmt.Printf("%s  1 %s = %s %s\n", out.Date, out.Currency, out.Rate, base)
+	_, reference, _ := currencies(ctx, cl)
+	fmt.Printf("%s  1 %s = %s %s\n", out.Date, out.Currency, out.Rate, reference)
+	if out.Rederived > 0 {
+		fmt.Printf("re-derived %d transactions\n", out.Rederived)
+	}
 	return nil
 }
 

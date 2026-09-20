@@ -14,12 +14,18 @@ import (
 
 func newLedger(t *testing.T) *Ledger {
 	t.Helper()
-	d, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "ledger.db"))
+	return newLedgerWith(t, "EUR")
+}
+
+// newLedgerWith opens a ledger whose rates are quoted against reference.
+func newLedgerWith(t *testing.T, reference string) *Ledger {
+	t.Helper()
+	d, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "ledger.db"), db.Options{RateReference: reference})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { d.Close() })
-	l := New(d, "EUR")
+	l := New(d)
 	l.now = func() time.Time { return time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC) }
 	return l
 }
@@ -72,8 +78,8 @@ func TestAccountValidation(t *testing.T) {
 }
 
 // TestExpenseAndIncome: signs are normalised from the kind, so a person can
-// type 4.50 for a coffee and it leaves the account; and base_amount equals
-// amount in the base currency with rate 1.
+// type 4.50 for a coffee and it leaves the account; and a row in the
+// reference currency is at par, with no rate of its own.
 func TestExpenseAndIncome(t *testing.T) {
 	l := newLedger(t)
 	ctx := context.Background()
@@ -83,7 +89,7 @@ func TestExpenseAndIncome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if coffee.Amount != -450 || coffee.BaseAmount != -450 || coffee.FXRate != "1" {
+	if coffee.Amount != -450 || coffee.ReferenceAmount != -450 || coffee.FXRate != "" {
 		t.Errorf("expense = %+v", coffee)
 	}
 	if coffee.CategoryID != "food/coffee-snacks" {
@@ -210,8 +216,8 @@ func TestSplits(t *testing.T) {
 		if s.Amount > 0 {
 			t.Errorf("split line kept the wrong sign: %+v", s)
 		}
-		if s.BaseAmount != s.Amount {
-			t.Errorf("split base amount %d != amount %d in base currency", s.BaseAmount, s.Amount)
+		if s.ReferenceAmount != s.Amount {
+			t.Errorf("split base amount %d != amount %d in base currency", s.ReferenceAmount, s.Amount)
 		}
 		sum += s.Amount
 	}
@@ -223,10 +229,10 @@ func TestSplits(t *testing.T) {
 	}
 }
 
-// TestBaseAmountFrozen is spec 8 at the ledger: a foreign-currency entry gets
-// its base amount from the rate at entry, and a later change to the rate table
-// does not move it.
-func TestBaseAmountFrozen(t *testing.T) {
+// TestEnteredRateBeatsTheTable is spec 8 at the ledger: a foreign-currency
+// entry takes the rate it was given, else the table's for its date, and a
+// later correction to the table moves only the rows that followed it.
+func TestEnteredRateBeatsTheTable(t *testing.T) {
 	l := newLedger(t)
 	ctx := context.Background()
 	pln := mustAccount(t, l, "PLN card", CreditCard, "PLN", 0)
@@ -239,8 +245,8 @@ func TestBaseAmountFrozen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if explicit.BaseAmount != -2320 {
-		t.Errorf("base = %d, want -2320", explicit.BaseAmount)
+	if explicit.ReferenceAmount != -2320 {
+		t.Errorf("base = %d, want -2320", explicit.ReferenceAmount)
 	}
 
 	if _, err := l.db.Exec(`INSERT INTO fx_rates (date,currency,rate) VALUES ('2026-09-01','PLN','0.2400')`); err != nil {
@@ -250,22 +256,20 @@ func TestBaseAmountFrozen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fromTable.FXRate != "0.2400" || fromTable.BaseAmount != -2400 {
-		t.Errorf("rate table not used: %+v", fromTable)
+	if fromTable.FXRate != "" || fromTable.ReferenceAmount != -2400 {
+		t.Errorf("rate table not used, or its rate was kept on the row: %+v", fromTable)
 	}
 
-	// The rate moves; the stored rows do not.
-	if _, err := l.db.Exec(`INSERT INTO fx_rates (date,currency,rate) VALUES ('2026-09-13','PLN','0.9999')`); err != nil {
+	// The rate moves: the row that followed the table follows it, the row
+	// with a rate of its own does not.
+	if _, err := l.SetRate(ctx, "PLN", "0.9999", "2026-09-13"); err != nil {
 		t.Fatal(err)
 	}
-	all, err := l.Transactions(ctx, Filter{AccountID: pln.ID})
-	if err != nil {
-		t.Fatal(err)
+	if got, _ := l.Get(ctx, fromTable.ID); got.ReferenceAmount != -9999 || got.FXRate != "" {
+		t.Errorf("the table row did not follow the correction: %+v", got)
 	}
-	for _, tx := range all {
-		if tx.BaseAmount != -2320 && tx.BaseAmount != -2400 {
-			t.Errorf("frozen base amount moved: %+v", tx)
-		}
+	if got, _ := l.Get(ctx, explicit.ID); got.ReferenceAmount != -2320 || got.FXRate != "0.2320" {
+		t.Errorf("the entered rate moved: %+v", got)
 	}
 }
 

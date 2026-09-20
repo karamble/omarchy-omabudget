@@ -341,6 +341,7 @@ func categoryReport(c *common, cl *client.Client, ctx context.Context, method, p
 // settings shows or changes what the app keeps in its configuration.
 //
 //	omabudget settings
+//	omabudget settings base-currency PLN
 //	omabudget settings model envelope
 //	omabudget settings period-start 10
 //	omabudget settings large-amount 500
@@ -359,6 +360,7 @@ func runSettings(args []string) error {
 	defer cancel()
 	var out struct {
 		BaseCurrency   string `json:"baseCurrency"`
+		RateReference  string `json:"rateReference"`
 		Model          string `json:"model"`
 		PeriodStartDay int    `json:"periodStartDay"`
 		LargeAmount    int64  `json:"largeAmount"`
@@ -367,6 +369,8 @@ func runSettings(args []string) error {
 	switch {
 	case len(pos) == 0:
 		err = cl.Do(ctx, "GET", "/api/settings", nil, &out)
+	case len(pos) == 2 && pos[0] == "base-currency":
+		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"baseCurrency": pos[1]}, &out)
 	case len(pos) == 2 && pos[0] == "model":
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"model": pos[1]}, &out)
 	case len(pos) == 2 && pos[0] == "period-start":
@@ -378,7 +382,7 @@ func runSettings(args []string) error {
 	case len(pos) == 2 && pos[0] == "large-amount":
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"largeAmount": pos[1]}, &out)
 	default:
-		return errors.New("usage: omabudget settings [model limits|envelope | period-start <1-28> | large-amount <amount>]")
+		return errors.New("usage: omabudget settings [base-currency <CODE> | model limits|envelope | period-start <1-28> | large-amount <amount>]")
 	}
 	if err != nil {
 		return err
@@ -386,7 +390,7 @@ func runSettings(args []string) error {
 	if c.json {
 		return client.PrintJSON(out)
 	}
-	fmt.Printf("currency      %s\nmodel         %s\nperiod start  day %d\nlarge amount  %s\nmonitoring    %v\n",
-		out.BaseCurrency, out.Model, out.PeriodStartDay, money.New(out.LargeAmount, out.BaseCurrency).Format(), out.Monitoring)
+	fmt.Printf("currency      %s\nrates against %s\nmodel         %s\nperiod start  day %d\nlarge amount  %s\nmonitoring    %v\n",
+		out.BaseCurrency, out.RateReference, out.Model, out.PeriodStartDay, money.New(out.LargeAmount, out.BaseCurrency).Format(), out.Monitoring)
 	return nil
 }

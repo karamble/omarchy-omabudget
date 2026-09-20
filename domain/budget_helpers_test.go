@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"math"
 	"testing"
 )
 
@@ -42,10 +43,10 @@ func TestBudgetHelpers(t *testing.T) {
 	spend(t, l, a, "Groceries", "2026-07-10", 40000)
 	spend(t, l, a, "Groceries", "2026-08-10", 50000)
 	spend(t, l, a, "Fuel", "2026-08-12", 6000)
-	if err := l.SetBudget(ctx, "Groceries", "2026-09", 35000); err != nil {
+	if err := l.SetBudget(ctx, "Groceries", "2026-09", 35000, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.SetBudget(ctx, "Fuel", "2026-09", 10000); err != nil {
+	if err := l.SetBudget(ctx, "Fuel", "2026-09", 10000, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,5 +117,31 @@ func TestBudgetHelpers(t *testing.T) {
 	}
 	if len(names) != 1 || names[0] != "Fuel" {
 		t.Fatalf("unbudgeted %v (coffee sits under the planned Food)", names)
+	}
+}
+
+// TestRatios pins the arithmetic every percentage shares: truncation for the
+// whole percentages an alert fires on, one rounded decimal for a delta, and
+// nothing when there is nothing to compare with.
+func TestRatios(t *testing.T) {
+	for _, c := range []struct {
+		part, whole int64
+		want        int
+	}{{50, 100, 50}, {2, 3, 66}, {-500, 1000, -50}, {100, 0, 0}, {100, -5, 0}, {450, 400, 112}} {
+		if got := pct(c.part, c.whole); got != c.want {
+			t.Errorf("pct(%d, %d) = %d, want %d", c.part, c.whole, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		delta, before int64
+		want          float64
+	}{{14000, 31000, 45.2}, {-5000, 5000, -100}, {300000, 100000, 300}, {-1, 100000, 0}, {1000, -2000, 50}} {
+		got := deltaPct(c.delta, c.before)
+		if got == nil || *got != c.want || (c.want == 0 && math.Signbit(*got)) {
+			t.Errorf("deltaPct(%d, %d) = %v, want %v", c.delta, c.before, got, c.want)
+		}
+	}
+	if got := deltaPct(100, 0); got != nil {
+		t.Errorf("deltaPct against nothing = %v, want nil", *got)
 	}
 }

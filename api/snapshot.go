@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/karamble/omarchy-omabudget/alerts"
+	"github.com/karamble/omarchy-omabudget/config"
 	"github.com/karamble/omarchy-omabudget/domain"
 )
 
@@ -81,19 +82,21 @@ func (s *Server) Snapshot() alerts.Snapshot {
 		snap.Numbers["bills.overdueCount"] = float64(len(overdue))
 	}
 
-	if cfg.LargeAmount > 0 {
+	// The threshold was typed in a base; the amounts it is held against are
+	// in the reference. A currency that has lost its rate compares nothing.
+	if threshold, ok := largeThreshold(ctx, l, cfg); ok {
 		if list, err := l.Transactions(ctx, domain.Filter{From: now.AddDate(0, 0, -30).Format(dateFmt), Limit: 500}); err == nil {
 			var large []map[string]any
 			for _, t := range list {
-				a := t.BaseAmount
+				a := t.ReferenceAmount
 				if a < 0 {
 					a = -a
 				}
-				if a < cfg.LargeAmount {
+				if a < threshold {
 					continue
 				}
 				large = append(large, map[string]any{
-					"id": t.ID, "date": t.Date, "description": t.Description, "amount": t.BaseAmount,
+					"id": t.ID, "date": t.Date, "description": t.Description, "amount": t.ReferenceAmount,
 					"category": t.CategoryID, "account": t.AccountID, "payee": t.PayeeID,
 				})
 			}
@@ -123,4 +126,18 @@ func (s *Server) Snapshot() alerts.Snapshot {
 		snap.Texts["health.monitoring"] = "false"
 	}
 	return snap
+}
+
+// largeThreshold is the large-amount threshold in the reference, false when
+// the check is off or the currency it was typed in has no rate on file.
+func largeThreshold(ctx context.Context, l *domain.Ledger, cfg *config.Config) (int64, bool) {
+	if cfg.LargeAmount <= 0 {
+		return 0, false
+	}
+	typedIn := cfg.LargeAmountCurrency
+	if typedIn == "" {
+		typedIn = cfg.BaseCurrency
+	}
+	v, ok, err := inReference(ctx, l, cfg.LargeAmount, typedIn)
+	return v, ok && err == nil
 }

@@ -22,7 +22,8 @@ var behaviours = map[string]bool{
 }
 
 // Envelope is one category's pot in a period: what rolled in, what was
-// assigned, what was spent, and what is available.
+// assigned, what was spent, and what is available. Every figure is in the
+// reference currency; a plan typed in another is read at today's rate.
 type Envelope struct {
 	CategoryID string `json:"categoryId"`
 	Name       string `json:"name"`
@@ -54,9 +55,9 @@ type Envelopes struct {
 	Items        []Envelope `json:"items"`
 }
 
-// Liquid sums the balances of the liquid accounts in base currency, reading
-// the ones kept in another at the latest rate on file. Currencies with no
-// rate are left out and named, so a figure is never quietly short.
+// Liquid sums the balances of the liquid accounts in the reference currency,
+// reading the ones kept in another at the latest rate on file. Currencies
+// with no rate are left out and named, so a figure is never quietly short.
 func (l *Ledger) Liquid(ctx context.Context) (int64, []string, error) {
 	accounts, err := l.Accounts(ctx)
 	if err != nil {
@@ -76,7 +77,7 @@ func (l *Ledger) Liquid(ctx context.Context) (int64, []string, error) {
 		if err != nil {
 			return 0, nil, err
 		}
-		v, ok := InBase(b.Minor, a.Currency, l.base, rates)
+		v, ok := ToReference(b.Minor, a.Currency, l.reference, rates)
 		if !ok {
 			missing[a.Currency] = true
 			continue
@@ -112,26 +113,25 @@ func (l *Ledger) Envelopes(ctx context.Context, key, from, to string) (Envelopes
 	if err != nil {
 		return Envelopes{}, err
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned, rollover_in FROM budgets WHERE period=?`, key)
+	lines, err := l.budgetLines(ctx, key)
 	if err != nil {
 		return Envelopes{}, err
 	}
-	defer rows.Close()
+	assigned, err := l.plannedInReference(ctx, lines)
+	if err != nil {
+		return Envelopes{}, err
+	}
 	out := Envelopes{Period: key, Liquid: liquid, Items: []Envelope{}}
-	for rows.Next() {
-		var id string
-		var assigned, rolled int64
-		if err := rows.Scan(&id, &assigned, &rolled); err != nil {
-			return Envelopes{}, err
-		}
+	for _, ln := range lines {
+		id := ln.CategoryID
 		c, ok := index[id]
 		if !ok {
 			continue
 		}
 		e := Envelope{
 			CategoryID: id, Name: c.Name, Icon: index.Icon(id), Behaviour: c.Behaviour,
-			RolloverIn: rolled, Assigned: assigned, Spent: spent[id],
-			Available:  rolled + assigned - spent[id],
+			RolloverIn: ln.RolloverIn, Assigned: assigned[id], Spent: spent[id],
+			Available:  ln.RolloverIn + assigned[id] - spent[id],
 			GoalTarget: c.GoalTarget, GoalDue: c.GoalDue,
 		}
 		if c.Behaviour == BehaviourGoal && c.GoalTarget > 0 {
@@ -152,9 +152,6 @@ func (l *Ledger) Envelopes(ctx context.Context, key, from, to string) (Envelopes
 		}
 		out.Items = append(out.Items, e)
 	}
-	if err := rows.Err(); err != nil {
-		return Envelopes{}, err
-	}
 	out.ToBeBudgeted = liquid - out.Held
 	slices.SortFunc(out.Items, func(a, b Envelope) int {
 		return cmp.Or(cmp.Compare(a.Available, b.Available), cmp.Compare(a.Name, b.Name))
@@ -164,8 +161,10 @@ func (l *Ledger) Envelopes(ctx context.Context, key, from, to string) (Envelopes
 
 // Rollover closes the period under fromKey (spending over from..to) into
 // toKey: pots that roll over carry what is left or what is short, monthly
-// pots start again at nothing, untracked categories are left alone. It
-// reports how many lines it wrote.
+// pots start again at nothing, untracked categories are left alone. The
+// carry is in the reference, since spending is, so a plan typed in another
+// currency is read at today's rate first. It reports how many lines it
+// wrote.
 func (l *Ledger) Rollover(ctx context.Context, fromKey, from, to, toKey string) (int, error) {
 	if err := checkPeriodKey(fromKey); err != nil {
 		return 0, err
@@ -180,7 +179,11 @@ func (l *Ledger) Rollover(ctx context.Context, fromKey, from, to, toKey string) 
 	if err != nil {
 		return 0, err
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned, rollover_in FROM budgets WHERE period=?`, fromKey)
+	lines, err := l.budgetLines(ctx, fromKey)
+	if err != nil {
+		return 0, err
+	}
+	assigned, err := l.plannedInReference(ctx, lines)
 	if err != nil {
 		return 0, err
 	}
@@ -190,23 +193,13 @@ func (l *Ledger) Rollover(ctx context.Context, fromKey, from, to, toKey string) 
 		keep    bool
 	}
 	var carries []carry
-	for rows.Next() {
-		var id string
-		var assigned, rolled int64
-		if err := rows.Scan(&id, &assigned, &rolled); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		c, ok := index[id]
+	for _, ln := range lines {
+		c, ok := index[ln.CategoryID]
 		if !ok || c.Behaviour == BehaviourUntracked {
 			continue
 		}
 		keep := c.Behaviour == BehaviourRollover || c.Behaviour == BehaviourGoal
-		carries = append(carries, carry{id: id, balance: rolled + assigned - spent[id], keep: keep})
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, err
+		carries = append(carries, carry{id: ln.CategoryID, balance: ln.RolloverIn + assigned[ln.CategoryID] - spent[ln.CategoryID], keep: keep})
 	}
 	n := 0
 	for _, c := range carries {
@@ -217,10 +210,10 @@ func (l *Ledger) Rollover(ctx context.Context, fromKey, from, to, toKey string) 
 			}
 			continue
 		}
-		if _, err := l.db.ExecContext(ctx, `INSERT INTO budgets (id,category_id,period,planned,rollover_enabled,rollover_in)
-			VALUES (?,?,?,0,1,?)
+		if _, err := l.db.ExecContext(ctx, `INSERT INTO budgets (id,category_id,period,planned,currency,rollover_enabled,rollover_in)
+			VALUES (?,?,?,0,?,1,?)
 			ON CONFLICT(category_id,period) DO UPDATE SET rollover_in=excluded.rollover_in, rollover_enabled=1`,
-			newID(), c.id, toKey, c.balance); err != nil {
+			newID(), c.id, toKey, l.reference, c.balance); err != nil {
 			return n, err
 		}
 		n++
@@ -250,9 +243,9 @@ func (l *Ledger) SetCategoryBehaviour(ctx context.Context, ref, behaviour string
 	return c, nil
 }
 
-// SetCategoryGoal sets a target to save by the month due (YYYY-MM), which
-// makes the category a goal; a target of zero clears the goal and the pot
-// keeps rolling over.
+// SetCategoryGoal sets a target, in reference minor units, to save by the
+// month due (YYYY-MM), which makes the category a goal; a target of zero
+// clears the goal and the pot keeps rolling over.
 func (l *Ledger) SetCategoryGoal(ctx context.Context, ref string, target int64, due string) (Category, error) {
 	if target < 0 {
 		return Category{}, errors.New("a goal cannot be negative")

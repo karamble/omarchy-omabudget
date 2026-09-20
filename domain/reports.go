@@ -48,21 +48,11 @@ func (l *Ledger) Spending(ctx context.Context, from, to, prevFrom, prevTo, budge
 	}
 	planned := map[string]int64{}
 	if budgetKey != "" {
-		rows, err := l.db.QueryContext(ctx, `SELECT category_id, planned FROM budgets WHERE period=?`, budgetKey)
+		lines, err := l.budgetLines(ctx, budgetKey)
 		if err != nil {
 			return SpendingReport{}, err
 		}
-		for rows.Next() {
-			var id string
-			var p int64
-			if err := rows.Scan(&id, &p); err != nil {
-				rows.Close()
-				return SpendingReport{}, err
-			}
-			planned[id] = p
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
+		if planned, err = l.plannedInReference(ctx, lines); err != nil {
 			return SpendingReport{}, err
 		}
 	}
@@ -80,15 +70,10 @@ func (l *Ledger) Spending(ctx context.Context, from, to, prevFrom, prevTo, budge
 	}
 	line := func(id string, s, p int64) CategorySpend {
 		c := index[id]
-		row := CategorySpend{CategoryID: id, Name: c.Name, Icon: index.Icon(id), Spent: s, Previous: p, Delta: s - p, Planned: planned[id]}
-		if out.Total > 0 {
-			row.Share = int(s * 100 / out.Total)
+		return CategorySpend{
+			CategoryID: id, Name: c.Name, Icon: index.Icon(id), Spent: s, Previous: p,
+			Share: pct(s, out.Total), Delta: s - p, DeltaPct: deltaPct(s-p, p), Planned: planned[id],
 		}
-		if p > 0 {
-			v := float64((s-p)*1000/p) / 10
-			row.DeltaPct = &v
-		}
-		return row
 	}
 	for id, c := range index {
 		if c.Kind != string(Expense) || c.ParentID != "" || (spent[id] == 0 && prev[id] == 0) {
@@ -139,9 +124,18 @@ func (l *Ledger) Metrics(ctx context.Context, from, to string, days, elapsed int
 	if err != nil {
 		return Metrics{}, err
 	}
+	// A bill in another currency is read at the rate on file, like a
+	// balance; one whose currency has no rate cannot be counted.
+	rates, err := l.RateTable(ctx, today)
+	if err != nil {
+		return Metrics{}, err
+	}
 	for _, d := range due {
-		if d.Kind == Expense && d.Date > today && d.Currency == l.base {
-			m.RecurringDue += d.Amount
+		if d.Kind != Expense || d.Date <= today {
+			continue
+		}
+		if v, ok := ToReference(d.Amount, d.Currency, l.reference, rates); ok {
+			m.RecurringDue += v
 		}
 	}
 	m.Projected = m.AverageDaily*int64(days) + m.RecurringDue
@@ -171,9 +165,7 @@ func (l *Ledger) Metrics(ctx context.Context, from, to string, days, elapsed int
 	if err != nil {
 		return Metrics{}, err
 	}
-	if tot.Expense > 0 {
-		m.FixedShare = int(fixed * 100 / tot.Expense)
-	}
+	m.FixedShare = pct(fixed, tot.Expense)
 	return m, nil
 }
 

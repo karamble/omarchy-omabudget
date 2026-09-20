@@ -92,7 +92,7 @@ func (s *Server) mcpBudget(ctx context.Context, period string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return l.Budgets(ctx, sp.key(), sp.from(), sp.to())
+	return s.budgets(ctx, l, sp)
 }
 
 func (s *Server) mcpBills(ctx context.Context, days int) (any, error) {

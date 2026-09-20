@@ -35,7 +35,7 @@ func (l *Ledger) Journal(ctx context.Context) (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "; OMABUDGET journal, base currency %s\n\n", l.base)
+	fmt.Fprintf(&b, "; OMABUDGET journal, reference currency %s\n\n", l.reference)
 	for _, a := range accounts {
 		if a.OpeningBalance == 0 {
 			continue
@@ -153,12 +153,12 @@ func (l *Ledger) CSV(ctx context.Context) (string, error) {
 	}
 	var b strings.Builder
 	w := csv.NewWriter(&b)
-	w.Write([]string{"id", "date", "kind", "amount", "currency", "baseAmount", "account", "counterAccount", "category", "description", "notes", "status", "tags"})
+	w.Write([]string{"id", "date", "kind", "amount", "currency", "referenceAmount", "account", "counterAccount", "category", "description", "notes", "status", "tags"})
 	for i := len(list) - 1; i >= 0; i-- {
 		t := list[i]
 		w.Write([]string{
 			t.ID, t.Date, string(t.Kind), money.New(t.Amount, t.Currency).Format(), t.Currency,
-			money.New(t.BaseAmount, l.base).Format(), names[t.AccountID], names[t.CounterAccountID],
+			money.New(t.ReferenceAmount, l.reference).Format(), names[t.AccountID], names[t.CounterAccountID],
 			index.Name(t.CategoryID), t.Description, t.Notes, string(t.Status), strings.Join(t.Tags, ";"),
 		})
 	}

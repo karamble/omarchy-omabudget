@@ -8,8 +8,8 @@ import "../components"
 Item {
   id: view
   property var app: null
-  readonly property bool formFocused: startField.activeFocus || largeField.activeFocus || modelGroup.activeFocus
-    || monitoringToggle.activeFocus || mcpToggle.activeFocus
+  readonly property bool formFocused: baseField.activeFocus || startField.activeFocus || largeField.activeFocus
+    || modelGroup.activeFocus || monitoringToggle.activeFocus || mcpToggle.activeFocus
 
   readonly property color fg: app ? app.foreground : Color.foreground
   readonly property color dim: app ? app.dim : Color.foreground
@@ -35,6 +35,7 @@ Item {
     app.query(["settings"], function (data, err) {
       if (err) { view.app.lastError = err; return }
       view.settings = data
+      if (!baseField.activeFocus) baseField.text = String(data.baseCurrency || "")
       if (!startField.activeFocus) startField.text = String(data.periodStartDay)
       if (!largeField.activeFocus) largeField.text = data.largeAmount > 0 ? view.plain(data.largeAmount) : ""
     })
@@ -48,6 +49,11 @@ Item {
   }
 
   function setModel(m) { app.run(["settings", "model", m], "budgeting model: " + m) }
+  function applyBase() {
+    var code = baseField.text.trim().toUpperCase()
+    if (!/^[A-Z]{3}$/.test(code)) { view.app.lastError = "a currency is three letters"; return }
+    app.run(["settings", "base-currency", code], "figures are shown in " + code)
+  }
   function applyStart() {
     var n = Number(startField.text.trim())
     if (!(n >= 1 && n <= 28)) { view.app.lastError = "the period start day is between 1 and 28"; return }
@@ -124,8 +130,29 @@ Item {
             app: view.app
             width: parent.width
             title: "BUDGETING"
-            Body { text: "Base currency  " + (view.settings ? view.settings.baseCurrency : "") }
-            Note { width: parent.width; text: "Every statistic is kept in it. It is fixed once the ledger has postings, because base amounts are frozen at entry." }
+            Caption { text: "SHOW FIGURES IN" }
+            Row {
+              spacing: Style.space(8)
+              TextField {
+                id: baseField
+                width: Style.space(70)
+                foreground: view.fg
+                accent: view.accent
+                font.family: view.ff
+                font.pixelSize: Style.font.body
+                placeholderText: view.settings ? view.settings.rateReference : "EUR"
+                Keys.onReturnPressed: view.applyBase()
+                Keys.onEnterPressed: view.applyBase()
+                Keys.onEscapePressed: view.forceActiveFocus()
+              }
+              Apply { text: "Apply"; onClicked: view.applyBase() }
+            }
+            Note {
+              width: parent.width
+              text: "Every figure is converted into it at today's rate on file, so it needs a rate unless it is "
+                + (view.settings ? view.settings.rateReference : "the reference")
+                + ", which the ledger keeps its figures in and quotes every rate against. Nothing stored moves when this changes."
+            }
             Caption { text: "MODEL"; topPadding: Style.space(6) }
             ButtonGroup {
               id: modelGroup

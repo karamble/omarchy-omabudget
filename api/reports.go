@@ -53,6 +53,10 @@ func (s *Server) handleSpending(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	if rep, err = s.shownSpending(r.Context(), l, rep); err != nil {
+		s.fail(w, err)
+		return
+	}
 	writeJSON(w, s.logger, http.StatusOK, rep)
 }
 
@@ -63,7 +67,21 @@ func (s *Server) spendingFor(ctx context.Context, l *domain.Ledger, period strin
 		return domain.SpendingReport{}, err
 	}
 	prev := span{sp.start.AddDate(0, -1, 0)}
-	return l.Spending(ctx, sp.from(), sp.to(), prev.from(), prev.to(), sp.key())
+	rep, err := l.Spending(ctx, sp.from(), sp.to(), prev.from(), prev.to(), sp.key())
+	if err != nil {
+		return domain.SpendingReport{}, err
+	}
+	return s.shownSpending(ctx, l, rep)
+}
+
+// shownSpending is the report in the base.
+func (s *Server) shownSpending(ctx context.Context, l *domain.Ledger, rep domain.SpendingReport) (domain.SpendingReport, error) {
+	v, err := s.lensFor(ctx, l)
+	if err != nil {
+		return domain.SpendingReport{}, err
+	}
+	rep = v.spending(rep)
+	return rep, v.done()
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +98,16 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := l.Metrics(r.Context(), p.From, p.To, p.Days, p.Elapsed, now.Format(dateFmt), trailing)
 	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	v, err := s.lensFor(r.Context(), l)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	m = v.metrics(m)
+	if err := v.done(); err != nil {
 		s.fail(w, err)
 		return
 	}
