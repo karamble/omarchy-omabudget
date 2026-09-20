@@ -41,8 +41,9 @@ Item {
   // fetch a person asked for, goes the way this machine is configured to
   // send it. Nothing else.
   readonly property var childEnv: root.buildEnv()
-  readonly property var passedEnv: ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR"]
 
+  // The list lives in the function, not in a property: a property declared
+  // after childEnv is still null when childEnv first evaluates.
   function buildEnv() {
     var env = {
       "PATH": "/usr/bin:/bin",
@@ -50,9 +51,11 @@ Item {
       "XDG_RUNTIME_DIR": Quickshell.env("XDG_RUNTIME_DIR") || "",
       "DBUS_SESSION_BUS_ADDRESS": Quickshell.env("DBUS_SESSION_BUS_ADDRESS") || ""
     }
-    for (var i = 0; i < root.passedEnv.length; i++) {
-      var v = Quickshell.env(root.passedEnv[i])
-      if (v) env[root.passedEnv[i]] = String(v)
+    var passed = ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy",
+                  "SSL_CERT_FILE", "SSL_CERT_DIR"]
+    for (var i = 0; i < passed.length; i++) {
+      var v = Quickshell.env(passed[i])
+      if (v) env[passed[i]] = String(v)
     }
     return env
   }

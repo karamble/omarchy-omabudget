@@ -739,13 +739,13 @@ Item {
                 width: Style.space(110)
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Rebuild"
-                tooltipText: "Runs make in the plugin directory, in a terminal"
+                tooltipText: "Runs make in the plugin directory, then restarts the shell"
                 foreground: root.foreground
                 accent: root.accent
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 bordered: true
-                onClicked: root.runBuild()
+                onClicked: root.runRebuild()
               }
             }
           }
@@ -862,14 +862,32 @@ Item {
     return "'" + String(s).replace(/'/g, "'\\''") + "'"
   }
 
+  // The shell owns the daemon, so a fresh binary on disk changes nothing until
+  // the shell starts it. Absolute for the same reason the launcher is.
+  readonly property string restarter:
+    "/usr/share/omarchy/bin/omarchy-restart-shell"
+
   // Detached: a Process owned by this window would die with it.
   function runBuild() {
+    root.build("")
+  }
+
+  // A stale helper is not a missing one. With nothing built the reprobe timer
+  // starts the daemon on its own, but here the old daemon is already running
+  // and the old views are loaded, so compiling alone changes nothing on
+  // screen. Restart the shell after the build.
+  function runRebuild() {
+    root.build(" && " + root.shellQuote(root.restarter))
+  }
+
+  function build(then) {
     if (!root.buildable) {
       root.lastError = "no Makefile in " + root.pluginDir
                      + ": reinstall with omarchy plugin add"
       return
     }
-    Quickshell.execDetached([root.launcher, "make -C " + root.shellQuote(root.pluginDir)])
+    Quickshell.execDetached([root.launcher,
+      "make -C " + root.shellQuote(root.pluginDir) + then])
   }
 
   // Is there a Makefile to run? Checked rather than assumed, so the build
