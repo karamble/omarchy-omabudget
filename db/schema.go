@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/karamble/omarchy-omabudget/money"
@@ -237,6 +238,90 @@ var migrations = []migration{
 		// reference.
 		after: fillBudgetCurrency,
 	},
+	{
+		version: 5,
+		name:    "rate source",
+		statements: []string{
+			// Where a rate came from: typed, shipped with the binary, or
+			// fetched from a named feed.
+			`ALTER TABLE fx_rates ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'
+				CHECK (source IN ('manual','seed','ecb','frankfurter'))`,
+			// Every lookup asks for one currency by date; the primary key is
+			// ordered by date first, so without this it scans.
+			`CREATE INDEX fx_rates_currency_date ON fx_rates(currency, date)`,
+		},
+		after: labelRateSources,
+	},
+}
+
+// startingRates is what the seeding before version 5 filed: one unit of each
+// in euro on startingDate, crossed into the reference and written to six
+// decimals. It is kept here so those rows can be told from typed ones.
+const startingDate = "2026-01-01"
+
+var startingRates = map[string]string{
+	"EUR": "1",
+	"USD": "0.92",
+	"PLN": "0.235",
+}
+
+// labelRateSources marks the rows the old seeding could have written as
+// seed and leaves every other row manual. It then records a marker for
+// every currency that seeding has offered, or that is on file, so a rate
+// removed from an old ledger is never offered again.
+func labelRateSources(ctx context.Context, tx *sql.Tx, _ Options) error {
+	var reference string
+	if err := tx.QueryRowContext(ctx, `SELECT value FROM meta WHERE key=?`, MetaRateReference).Scan(&reference); err != nil {
+		return fmt.Errorf("reading the rate reference: %w", err)
+	}
+	var accounts, rates int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM accounts`).Scan(&accounts); err != nil {
+		return err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM fx_rates`).Scan(&rates); err != nil {
+		return err
+	}
+	offered := map[string]bool{}
+	// Seeding ran at every daemon start, so a ledger that has been used
+	// under a quoted reference had the whole starting set offered to it.
+	if inEuro, ok := new(big.Rat).SetString(startingRates[reference]); ok && accounts+rates > 0 {
+		for currency, quote := range startingRates {
+			if currency == reference {
+				continue
+			}
+			offered[currency] = true
+			ref, _ := new(big.Rat).SetString(quote)
+			rate := new(big.Rat).Quo(ref, inEuro).FloatString(6)
+			rate = strings.TrimSuffix(strings.TrimRight(rate, "0"), ".")
+			if _, err := tx.ExecContext(ctx, `UPDATE fx_rates SET source='seed' WHERE date=? AND currency=? AND rate=?`,
+				startingDate, currency, rate); err != nil {
+				return err
+			}
+		}
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT currency FROM fx_rates`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var currency string
+		if err := rows.Scan(&currency); err != nil {
+			rows.Close()
+			return err
+		}
+		offered[currency] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for currency := range offered {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)`,
+			MetaRateSeeded(currency), startingDate); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // fillBudgetCurrency stamps every budget line with the reference.

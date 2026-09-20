@@ -151,7 +151,8 @@ Overlay {
 
   // What the amount becomes in the reference currency, and at which rate.
   // Shown only for an account in another currency, where the answer is not
-  // obvious and where a missing rate means the entry will be refused.
+  // obvious and where a currency with no rate at all means the entry will be
+  // refused.
   component CurrencyNote: Text {
     readonly property var known: card.effectiveRate
     visible: card.accountCurrency !== "" && card.reference !== ""
@@ -159,8 +160,9 @@ Overlay {
     text: {
       if (!known)
         return "no " + card.accountCurrency + " to " + card.reference
-             + " rate on file for " + card.entryDate + ": the entry will be refused until one is added"
+             + " rate on file: the entry will be refused until one is added"
       var at = "at " + String(known.rate) + (known.date ? " (" + String(known.date) + ")" : "")
+      if (known.ahead) at += ", the latest on file"
       var v = card.app ? card.app.evaluate(amountField.text) : NaN
       if (!isFinite(v)) return at
       var d = card.app.decimalsFor(card.reference)

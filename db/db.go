@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -98,6 +99,12 @@ func (d *DB) RateReference() string { return d.reference }
 
 // MetaRateReference is the meta key the rate reference is kept under.
 const MetaRateReference = "rate_reference"
+
+// MetaRateSeeded is the meta key recording that a starting rate has been
+// offered for a currency. Its value is the date the rate was filed under.
+func MetaRateSeeded(currency string) string {
+	return "rate_seeded:" + strings.ToUpper(currency)
+}
 
 // Meta reads one value from the meta table; a key that is not there is
 // ErrNotFound.

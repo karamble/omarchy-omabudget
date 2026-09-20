@@ -16,6 +16,7 @@ import (
 	"github.com/karamble/omarchy-omabudget/config"
 	"github.com/karamble/omarchy-omabudget/db"
 	"github.com/karamble/omarchy-omabudget/domain"
+	"github.com/karamble/omarchy-omabudget/money"
 )
 
 // newTestServer opens a temp ledger behind a server whose period begins on
@@ -123,6 +124,19 @@ func TestDashboardDocument(t *testing.T) {
 	}
 	if out.Today != "2026-09-13" {
 		t.Errorf("today = %q", out.Today)
+	}
+	// The document carries the newest rate per currency, not the table.
+	for _, r := range []struct{ currency, rate, date string }{{"USD", "0.90", "2026-06-01"}, {"USD", "0.95", "2026-09-01"}} {
+		if _, err := l.SetRate(context.Background(), r.currency, money.Rate(r.rate), r.date); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, body = call(t, s, "GET", "/api/dashboard", nil)
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Rates) != 1 || out.Rates[0].Currency != "USD" || out.Rates[0].Date != "2026-09-01" || out.Rates[0].Rate != "0.95" {
+		t.Errorf("rates = %+v, want the newest USD rate alone", out.Rates)
 	}
 	if want := (domain.Totals{Income: 300000, Expense: 2500, Net: 297500, SavingsRate: 99}); out.Totals != want {
 		t.Errorf("totals = %+v, want %+v", out.Totals, want)

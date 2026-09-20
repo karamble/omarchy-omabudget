@@ -572,8 +572,8 @@ type dashboardOut struct {
 	DefaultAccountID string `json:"defaultAccountId,omitempty"`
 	// Today is the daemon's own date, which is what an undated entry gets.
 	Today string `json:"today"`
-	// Rates is the table itself, newest first, so a form can show the rate an
-	// entry would freeze at. It is hand-entered and small.
+	// Rates is the newest rate on file per currency, so a form can show the
+	// rate an entry would read. The table itself is behind /api/rates.
 	Rates []domain.FXRate `json:"rates"`
 }
 
@@ -708,11 +708,10 @@ func (s *Server) dashboard(ctx context.Context, l *domain.Ledger) (dashboardOut,
 	for _, c := range append(currencies, v.base, v.reference) {
 		out.Decimals[c] = money.Decimals(c)
 	}
-	// The raw table, not the rates local above: that one is RateTable, which
-	// reaches for the earliest rate when none covers the date, while an entry
-	// is refused instead. A form previewing an entry has to follow the entry's
-	// rule.
-	if out.Rates, err = l.Rates(ctx, ""); err != nil {
+	// One row per currency rather than the rates local above, which only
+	// covers currencies in use: a form previews an entry in whatever
+	// currency the account is kept in.
+	if out.Rates, err = l.LatestRates(ctx); err != nil {
 		return dashboardOut{}, err
 	}
 	if err := v.done(); err != nil {

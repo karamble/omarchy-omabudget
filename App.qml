@@ -126,17 +126,19 @@ Item {
   readonly property string rateReference: root.snap && root.snap.rateReference ? String(root.snap.rateReference)
     : (root.snap && root.snap.baseCurrency ? String(root.snap.baseCurrency) : "")
 
-  // The rate a new entry would freeze at, spec 8: the latest one filed on or
-  // before the date, and nothing at all when there is none. That is the
-  // ledger's rule for an entry, which refuses rather than reaching forward to
-  // a later rate. A rate is against the reference, not the currency shown.
+  // The rate a new entry would read, spec 8: the newest on file for the
+  // currency, and nothing at all when there is none, which is when the ledger
+  // refuses the entry. An entry dated before that rate reads the table at its
+  // own date, so the row comes back flagged ahead rather than withheld. A rate
+  // is against the reference, not the currency shown.
   function rateFor(currency, date) {
     if (!currency || root.rateReference === "") return null
-    if (currency === root.rateReference) return { rate: "1", date: date }
+    if (currency === root.rateReference) return { rate: "1", date: date, ahead: false }
     var list = root.snap.rates ? root.snap.rates : []
     var on = date && date !== "" ? date : root.today()
     for (var i = 0; i < list.length; i++)
-      if (list[i].currency === currency && String(list[i].date) <= on) return list[i]
+      if (list[i].currency === currency)
+        return { rate: list[i].rate, date: list[i].date, ahead: String(list[i].date) > on }
     return null
   }
 
@@ -880,11 +882,15 @@ Item {
     onExited: function (code, status) { root.buildable = code === 0 }
   }
 
-  // Any Go file newer than the helper means the helper is behind. Asking the
-  // filesystem rather than git makes a local edit read the same as an update.
+  // A Go source file, tests excluded, or a module file newer than the helper
+  // means the helper is behind. Asking the filesystem rather than git makes
+  // a local edit read the same as an update.
   Process {
     id: staleProbe
-    command: ["/usr/bin/find", root.pluginDir, "-name", "*.go", "-newer", root.helperPath, "-print", "-quit"]
+    command: ["/usr/bin/find", root.pluginDir,
+              "(", "-name", "*.go", "-not", "-name", "*_test.go",
+              "-o", "-name", "go.mod", "-o", "-name", "go.sum", ")",
+              "-newer", root.helperPath, "-print", "-quit"]
     clearEnvironment: true
     environment: root.childEnv
     stdout: StdioCollector {

@@ -7,9 +7,14 @@
 package guard
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -221,5 +226,184 @@ func TestVersionsAgree(t *testing.T) {
 
 	if string(m[1]) != string(mk[1]) {
 		t.Errorf("manifest.json says %q, the Makefile says %q", m[1], mk[1])
+	}
+}
+
+// outbound lists, per package, the symbols that open a connection outward.
+// Using net/http for the loopback server is fine; dialling is not.
+var outbound = map[string][]string{
+	"net/http":   {"Get", "Head", "Post", "PostForm", "NewRequest", "NewRequestWithContext", "DefaultClient", "DefaultTransport", "Client", "Transport"},
+	"net":        {"Dial", "DialTimeout", "DialTCP", "DialUDP", "DialIP", "DialUnix", "Dialer"},
+	"crypto/tls": {"Dial", "DialWithDialer", "Dialer"},
+}
+
+// outboundFiles are the only files that may use them: the CLI's client,
+// which talks to the loopback daemon, and the rate fetch, which runs only
+// when a person asks.
+var outboundFiles = []string{
+	"client/client.go",
+	"feed/fetch.go",
+}
+
+// TestOutboundNetworkIsConfined walks every non-test Go file as syntax,
+// resolves import aliases, and fails when a dialling symbol appears outside
+// the two files allowed to. Each of those must itself be found using one,
+// so a renamed file or a detector that stopped matching fails here rather
+// than passing quietly.
+func TestOutboundNetworkIsConfined(t *testing.T) {
+	root := ".."
+	hits := map[string][]string{}
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if uses := outboundUses(t, path); len(uses) > 0 {
+			hits[filepath.ToSlash(rel)] = uses
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allowed := map[string]bool{}
+	for _, file := range outboundFiles {
+		allowed[file] = true
+		if _, err := os.Stat(filepath.Join(root, file)); err != nil {
+			t.Errorf("%s is missing: update outboundFiles if it moved", file)
+			continue
+		}
+		if len(hits[file]) == 0 {
+			t.Errorf("%s opens no connection: the file or the detector has drifted", file)
+		}
+	}
+	for file, uses := range hits {
+		if !allowed[file] {
+			t.Errorf("%s reaches outward through %s", file, strings.Join(uses, ", "))
+		}
+	}
+}
+
+// outboundUses parses one file and reports each dialling symbol it names,
+// through whatever alias the package was imported under. A dot import of a
+// watched package is a hit on its own.
+func outboundUses(t *testing.T, file string) []string {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("%s: %v", file, err)
+	}
+	aliases := map[string]string{}
+	var uses []string
+	for _, imp := range f.Imports {
+		pkg := strings.Trim(imp.Path.Value, `"`)
+		if _, watched := outbound[pkg]; !watched {
+			continue
+		}
+		name := pkg[strings.LastIndex(pkg, "/")+1:]
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		switch name {
+		case ".":
+			uses = append(uses, "a dot import of "+pkg)
+		case "_":
+		default:
+			aliases[name] = pkg
+		}
+	}
+	if len(aliases) == 0 {
+		return uses
+	}
+	seen := map[string]bool{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		id, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		pkg, ok := aliases[id.Name]
+		if !ok {
+			return true
+		}
+		if slices.Contains(outbound[pkg], sel.Sel.Name) {
+			use := id.Name + "." + sel.Sel.Name
+			if !seen[use] {
+				seen[use] = true
+				uses = append(uses, use)
+			}
+		}
+		return true
+	})
+	sort.Strings(uses)
+	return uses
+}
+
+// mcpFile is where the tools the MCP server offers are registered, and
+// pinnedMCPTools is every tool it offers today.
+const mcpFile = "../mcpserver/mcpserver.go"
+
+var mcpToolName = regexp.MustCompile(`Name:\s*"(omabudget_[a-z_]+)"`)
+
+var pinnedMCPTools = []string{
+	"omabudget_health",
+	"omabudget_catalogue",
+	"omabudget_alerts",
+	"omabudget_disarm",
+	"omabudget_arm",
+	"omabudget_edit",
+	"omabudget_dashboard",
+	"omabudget_transactions",
+	"omabudget_add_transaction",
+	"omabudget_budget",
+	"omabudget_bills",
+	"omabudget_spending",
+}
+
+// TestMCPToolsArePinned fails when the set of tools the MCP server offers
+// differs from the pin, so adding one means editing this list in the same
+// change. Nothing on that surface may touch the rate table or fetch.
+func TestMCPToolsArePinned(t *testing.T) {
+	src, err := os.ReadFile(mcpFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, m := range mcpToolName.FindAllStringSubmatch(string(src), -1) {
+		found[m[1]] = true
+	}
+	if len(found) == 0 {
+		t.Fatalf("%s: found no tools, the registration pattern has drifted", mcpFile)
+	}
+	pinned := map[string]bool{}
+	for _, name := range pinnedMCPTools {
+		pinned[name] = true
+		if !found[name] {
+			t.Errorf("%s no longer offers %s", mcpFile, name)
+		}
+	}
+	for name := range found {
+		if !pinned[name] {
+			t.Errorf("%s offers %s, which is not pinned", mcpFile, name)
+		}
+		if strings.Contains(name, "rate") || strings.Contains(name, "fetch") {
+			t.Errorf("%s reaches the rate table or the network", name)
+		}
 	}
 }

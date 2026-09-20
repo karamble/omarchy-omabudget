@@ -20,14 +20,22 @@ import (
 // transaction either follows this table or carries a rate of its own; the
 // table is what a balance in another currency is read at.
 
-// FXRate is one day's rate for a currency against the reference. Rederived
-// counts the transactions a change to it moved.
+// FXRate is one day's rate for a currency against the reference. Source is
+// where it came from, and Rederived counts the transactions a change to it
+// moved.
 type FXRate struct {
 	Date      string     `json:"date"`
 	Currency  string     `json:"currency"`
 	Rate      money.Rate `json:"rate"`
+	Source    string     `json:"source"`
 	Rederived int        `json:"rederived,omitempty"`
 }
+
+// Where a rate can come from. A feed names itself.
+const (
+	SourceManual = "manual"
+	SourceSeed   = "seed"
+)
 
 // SetRate files a rate for a currency on a date, replacing that day's if it
 // has one. The date defaults to today. Every transaction in that currency
@@ -60,8 +68,9 @@ func (l *Ledger) SetRate(ctx context.Context, currency string, rate money.Rate, 
 		return FXRate{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO fx_rates (date,currency,rate) VALUES (?,?,?)
-		ON CONFLICT(date,currency) DO UPDATE SET rate=excluded.rate`, date, currency, string(rate)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO fx_rates (date,currency,rate,source) VALUES (?,?,?,?)
+		ON CONFLICT(date,currency) DO UPDATE SET rate=excluded.rate, source=excluded.source`,
+		date, currency, string(rate), SourceManual); err != nil {
 		return FXRate{}, err
 	}
 	n, err := l.rederive(ctx, tx, currency)
@@ -71,12 +80,12 @@ func (l *Ledger) SetRate(ctx context.Context, currency string, rate money.Rate, 
 	if err := tx.Commit(); err != nil {
 		return FXRate{}, err
 	}
-	return FXRate{Date: date, Currency: currency, Rate: rate, Rederived: n}, nil
+	return FXRate{Date: date, Currency: currency, Rate: rate, Source: SourceManual, Rederived: n}, nil
 }
 
 // Rates lists what is on file, newest first, for one currency or all of them.
 func (l *Ledger) Rates(ctx context.Context, currency string) ([]FXRate, error) {
-	q := `SELECT date,currency,rate FROM fx_rates`
+	q := `SELECT date,currency,rate,source FROM fx_rates`
 	var args []any
 	if currency != "" {
 		q += ` WHERE currency=?`
@@ -92,7 +101,30 @@ func (l *Ledger) Rates(ctx context.Context, currency string) ([]FXRate, error) {
 	for rows.Next() {
 		var r FXRate
 		var raw string
-		if err := rows.Scan(&r.Date, &r.Currency, &raw); err != nil {
+		if err := rows.Scan(&r.Date, &r.Currency, &raw, &r.Source); err != nil {
+			return nil, err
+		}
+		r.Rate = money.Rate(raw)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// LatestRates is the newest rate on file for each currency, by currency,
+// which is all a form needs to preview an entry.
+func (l *Ledger) LatestRates(ctx context.Context) ([]FXRate, error) {
+	rows, err := l.db.QueryContext(ctx, `SELECT f.date, f.currency, f.rate, f.source FROM fx_rates f
+		JOIN (SELECT currency, MAX(date) AS date FROM fx_rates GROUP BY currency) n
+		ON f.currency=n.currency AND f.date=n.date ORDER BY f.currency`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []FXRate{}
+	for rows.Next() {
+		var r FXRate
+		var raw string
+		if err := rows.Scan(&r.Date, &r.Currency, &raw, &r.Source); err != nil {
 			return nil, err
 		}
 		r.Rate = money.Rate(raw)
@@ -378,21 +410,16 @@ func (l *Ledger) SeedRates(ctx context.Context) (int, error) {
 		}
 		rate := new(big.Rat).Quo(ref, inEuro)
 		if _, err := l.db.ExecContext(ctx,
-			`INSERT OR IGNORE INTO fx_rates (date,currency,rate) VALUES (?,?,?)`,
-			referenceDate, currency, trimRate(rate.FloatString(6))); err != nil {
+			`INSERT OR IGNORE INTO fx_rates (date,currency,rate,source) VALUES (?,?,?,?)`,
+			referenceDate, currency, string(money.RateOf(rate)), SourceSeed); err != nil {
+			return filed, err
+		}
+		// The marker outlives the row, so a removed starting rate stays gone.
+		if _, err := l.db.ExecContext(ctx, `INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)`,
+			db.MetaRateSeeded(currency), referenceDate); err != nil {
 			return filed, err
 		}
 		filed++
 	}
 	return filed, nil
-}
-
-// trimRate drops the zeros a fixed number of decimal places leaves behind, so
-// the table reads 0.92 rather than 0.920000.
-func trimRate(s string) string {
-	if !strings.Contains(s, ".") {
-		return s
-	}
-	s = strings.TrimRight(s, "0")
-	return strings.TrimSuffix(s, ".")
 }

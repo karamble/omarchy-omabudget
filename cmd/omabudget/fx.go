@@ -68,9 +68,9 @@ func runRateList(args []string) error {
 		return err
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintf(tw, "DATE\tCURRENCY\tRATE\n")
+	fmt.Fprintf(tw, "DATE\tCURRENCY\tRATE\tSOURCE\n")
 	for _, r := range list {
-		fmt.Fprintf(tw, "%s\t%s\t1 %s = %s %s\n", r.Date, r.Currency, r.Currency, r.Rate, reference)
+		fmt.Fprintf(tw, "%s\t%s\t1 %s = %s %s\t%s\n", r.Date, r.Currency, r.Currency, r.Rate, reference, r.Source)
 	}
 	return tw.Flush()
 }

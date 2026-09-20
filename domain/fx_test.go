@@ -18,7 +18,7 @@ func TestSetRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Currency != "USD" || r.Date != "2026-09-13" || r.Rate != "0.92" {
+	if r.Currency != "USD" || r.Date != "2026-09-13" || r.Rate != "0.92" || r.Source != SourceManual {
 		t.Fatalf("%+v", r)
 	}
 	// The same day is replaced, not doubled.
@@ -29,7 +29,7 @@ func TestSetRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].Rate != "0.93" {
+	if len(list) != 1 || list[0].Rate != "0.93" || list[0].Source != SourceManual {
 		t.Fatalf("%+v", list)
 	}
 
@@ -224,6 +224,19 @@ func TestSeedRates(t *testing.T) {
 		if string(r.Rate) != want[r.Currency] {
 			t.Errorf("%s is %s, want %s", r.Currency, r.Rate, want[r.Currency])
 		}
+		if r.Source != SourceSeed {
+			t.Errorf("%s is from %q", r.Currency, r.Source)
+		}
+		if v, err := l.DB().Meta(ctx, db.MetaRateSeeded(r.Currency)); err != nil || v != referenceDate {
+			t.Errorf("%s marker = %q, %v", r.Currency, v, err)
+		}
+	}
+	// A typed rate over a seeded one takes the row over.
+	if _, err := l.SetRate(ctx, "USD", "0.93", referenceDate); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := l.Rates(ctx, "USD"); len(list) != 1 || list[0].Source != SourceManual {
+		t.Errorf("%+v", list)
 	}
 
 	// A second run leaves the table alone, and so does a removed rate.
@@ -241,7 +254,7 @@ func TestSeedRates(t *testing.T) {
 	for _, r := range all {
 		crossed[r.Currency] = string(r.Rate)
 	}
-	if crossed["EUR"] != "4.255319" || crossed["USD"] != "3.914894" {
+	if crossed["EUR"] != "4.2553191" || crossed["USD"] != "3.9148936" {
 		t.Fatalf("%+v", crossed)
 	}
 
@@ -628,5 +641,31 @@ func TestRateCorrectionRefusesOverflow(t *testing.T) {
 	}
 	if got, _ := l.Get(ctx, huge.ID); got.ReferenceAmount != -100000000000000000 {
 		t.Errorf("the refused correction moved the row: %d", got.ReferenceAmount)
+	}
+}
+
+// TestLatestRates: one row per currency, the newest, whatever else is on
+// file, and none at all for a currency that has none.
+func TestLatestRates(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+	if got, err := l.LatestRates(ctx); err != nil || len(got) != 0 {
+		t.Fatalf("empty table: %+v, %v", got, err)
+	}
+	for _, r := range []struct{ currency, rate, date string }{
+		{"USD", "0.90", "2026-06-01"}, {"USD", "0.95", "2026-09-01"}, {"USD", "0.85", "2026-01-01"},
+		{"PLN", "0.235", "2026-03-01"},
+	} {
+		if _, err := l.SetRate(ctx, r.currency, money.Rate(r.rate), r.date); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := l.LatestRates(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Currency != "PLN" || got[0].Rate != "0.235" ||
+		got[1].Currency != "USD" || got[1].Rate != "0.95" || got[1].Date != "2026-09-01" || got[1].Source != SourceManual {
+		t.Fatalf("%+v", got)
 	}
 }

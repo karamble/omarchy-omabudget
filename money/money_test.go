@@ -2,6 +2,7 @@ package money
 
 import (
 	"errors"
+	"math/big"
 	"testing"
 )
 
@@ -333,6 +334,34 @@ func TestRateEqual(t *testing.T) {
 	for _, c := range cases {
 		if got := c.a.Equal(c.b); got != c.want {
 			t.Errorf("Rate(%q).Equal(%q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestRateOf(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"500/573", "0.87260035"},
+		{"1000/235", "4.2553191"},
+		{"184/47", "3.9148936"},
+		{"0.92", "0.92"},
+		{"1", "1"},
+		{"100", "100"},
+		{"100/18094", "0.0055266939"},
+		{"20424.81", "20424.81"},
+		{"1/3", "0.33333333"},
+		{"2/3", "0.66666667"},
+		{"123456789", "123456790"},
+		{"0.000000000123456789", "0.00000000012345679"},
+		{"-0.5", "-0.5"},
+		{"0", "0"},
+	}
+	for _, c := range cases {
+		r, ok := new(big.Rat).SetString(c.in)
+		if !ok {
+			t.Fatalf("%s does not parse", c.in)
+		}
+		if got := RateOf(r); got != Rate(c.want) {
+			t.Errorf("RateOf(%s) = %s, want %s", c.in, got, c.want)
 		}
 	}
 }

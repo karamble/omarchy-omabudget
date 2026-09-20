@@ -435,3 +435,77 @@ func TestFillBudgetCurrency(t *testing.T) {
 		t.Errorf("filed currency = %q, %v; want PLN", currency, err)
 	}
 }
+
+// TestLabelRateSources: bringing a version 4 ledger forward marks the rows
+// the old seeding wrote as seed, leaves typed rows manual, and records a
+// marker for every currency seeding offered, on file or since removed.
+func TestLabelRateSources(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "ledger.db")
+	old, err := connect(path, Options{RateReference: "EUR"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.migrateTo(ctx, 4); err != nil {
+		t.Fatal(err)
+	}
+	// The old seeding filed USD and PLN; PLN was removed and GBP typed.
+	if _, err := old.ExecContext(ctx, `INSERT INTO fx_rates (date,currency,rate) VALUES
+		('2026-01-01','USD','0.92'), ('2026-03-01','USD','0.9'), ('2026-02-01','GBP','1.15')`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+
+	d, err := Open(ctx, path, Options{RateReference: "EUR"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	want := map[string]string{"2026-01-01 USD": "seed", "2026-03-01 USD": "manual", "2026-02-01 GBP": "manual"}
+	rows, err := d.QueryContext(ctx, `SELECT date, currency, source FROM fx_rates`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for rows.Next() {
+		var date, currency, source string
+		if err := rows.Scan(&date, &currency, &source); err != nil {
+			t.Fatal(err)
+		}
+		got[date+" "+currency] = source
+	}
+	rows.Close()
+	for k, source := range want {
+		if got[k] != source {
+			t.Errorf("%s is %q, want %q", k, got[k], source)
+		}
+	}
+	for _, currency := range []string{"USD", "PLN", "GBP"} {
+		if _, err := d.Meta(ctx, MetaRateSeeded(currency)); err != nil {
+			t.Errorf("no marker for %s: %v", currency, err)
+		}
+	}
+	if _, err := d.Meta(ctx, MetaRateSeeded("EUR")); !errors.Is(err, ErrNotFound) {
+		t.Errorf("the reference got a marker: %v", err)
+	}
+	var name string
+	if err := d.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type='index' AND name='fx_rates_currency_date'`).Scan(&name); err != nil {
+		t.Errorf("index missing: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO fx_rates (date,currency,rate,source) VALUES ('2026-04-01','USD','0.9','guess')`); err == nil {
+		t.Error("an unknown source was accepted")
+	}
+}
+
+// TestFreshLedgerHasNoSeedMarkers: a ledger nothing has touched was never
+// offered a starting rate, so it carries no marker to say otherwise.
+func TestFreshLedgerHasNoSeedMarkers(t *testing.T) {
+	d, _ := openTemp(t)
+	var n int
+	if err := d.QueryRow(`SELECT COUNT(*) FROM meta WHERE key LIKE 'rate_seeded:%'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("%d markers on a fresh ledger", n)
+	}
+}

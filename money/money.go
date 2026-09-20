@@ -234,6 +234,49 @@ func parseRate(rate Rate) (*big.Rat, error) {
 	return r, nil
 }
 
+// RateOf writes a rational as a decimal rate to eight significant digits,
+// trailing zeros dropped, so a crossed rate reads as a number everywhere a
+// fraction would not.
+func RateOf(r *big.Rat) Rate {
+	if r.Sign() == 0 {
+		return "0"
+	}
+	v := new(big.Rat).Abs(r)
+	// Find the power of ten below v, so the eighth digit is the last kept.
+	exp := 0
+	ten := big.NewRat(10, 1)
+	for p := big.NewRat(1, 1); ; {
+		if v.Cmp(p) < 0 {
+			p.Quo(p, ten)
+			exp--
+			continue
+		}
+		if next := new(big.Rat).Mul(p, ten); v.Cmp(next) >= 0 {
+			p = next
+			exp++
+			continue
+		}
+		break
+	}
+	var s string
+	if places := 7 - exp; places >= 0 {
+		s = v.FloatString(places)
+	} else {
+		// Past eight integer digits: round to the kept digit's place.
+		unit := new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-places)), nil))
+		q := new(big.Rat).Quo(v, unit)
+		n, _ := new(big.Int).SetString(q.FloatString(0), 10)
+		s = new(big.Int).Mul(n, unit.Num()).String()
+	}
+	if strings.Contains(s, ".") {
+		s = strings.TrimSuffix(strings.TrimRight(s, "0"), ".")
+	}
+	if r.Sign() < 0 {
+		s = "-" + s
+	}
+	return Rate(s)
+}
+
 // Equal reports whether two rates are the same number, so "0.235" and
 // "0.2350" agree. A rate that does not parse equals nothing.
 func (r Rate) Equal(o Rate) bool {
