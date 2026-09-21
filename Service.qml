@@ -25,6 +25,12 @@ Item {
   readonly property int maxRestarts: 5
   property int restarts: 0
   property string lastError: ""
+  // Why the daemon last died, kept apart from lastError so that giving up
+  // can report the cause rather than replace it. "gave up after 5 restarts"
+  // describes this component, not the failure, and on its own it sends
+  // somebody looking in the wrong place: the usual cause is another daemon
+  // already holding the port, which the daemon itself names exactly.
+  property string exitReason: ""
   // The bar and the app read these rather than probing the filesystem
   // themselves.
   property bool built: false
@@ -32,6 +38,31 @@ Item {
 
   function backoffMs() {
     return Math.min(30000, 1000 * Math.pow(2, root.restarts))
+  }
+
+  // The daemon logs to stderr as well as failing on it, so the first line is
+  // usually a benign INFO record and the reason is further down. Structured
+  // records are skipped rather than the last line taken blindly, so a warning
+  // written after the failure cannot hide it.
+  function failureLine(text) {
+    var lines = String(text || "").split("\n")
+    var reason = ""
+    var lastAny = ""
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim()
+      if (line === "") continue
+      lastAny = line
+      if (/(^|\s)level=(INFO|DEBUG)(\s|$)/.test(line)) continue
+      reason = line
+    }
+    return reason !== "" ? reason : lastAny
+  }
+
+  // What to show when nothing is running: the cause when the daemon gave one,
+  // and how many attempts it took either way.
+  function gaveUpMessage() {
+    var head = "gave up after " + root.maxRestarts + " restarts"
+    return root.exitReason !== "" ? head + ": " + root.exitReason : head
   }
 
   // Passed to every child. PATH reaches notify-send in /usr/bin, HOME finds
@@ -102,7 +133,7 @@ Item {
       // A clean exit means it was told to stop.
       if (code === 0) return
       if (root.restarts >= root.maxRestarts) {
-        root.lastError = "gave up after " + root.maxRestarts + " restarts"
+        root.lastError = root.gaveUpMessage()
         return
       }
       root.restarts++
@@ -113,8 +144,12 @@ Item {
     stderr: StdioCollector {
       waitForEnd: false
       onStreamFinished: {
-        var msg = String(text || "").trim()
-        if (msg !== "") root.lastError = msg.split("\n")[0]
+        var reason = root.failureLine(text)
+        if (reason === "") return
+        root.exitReason = reason
+        // The stream can finish either side of onExited, so a reason that
+        // arrives late still reaches a message that has already been written.
+        root.lastError = root.restarts >= root.maxRestarts ? root.gaveUpMessage() : reason
       }
     }
   }
