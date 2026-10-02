@@ -717,7 +717,7 @@ Item {
               width: parent.width
               visible: !root.built && root.buildable
               wrapMode: Text.WrapAnywhere
-              text: I18n.t("app.Cd") + root.pluginDir + "\n  make"
+              text: "  cd " + root.pluginDir + "\n  make"
               color: root.dimmer
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

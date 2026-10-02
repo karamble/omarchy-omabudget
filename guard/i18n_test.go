@@ -161,6 +161,13 @@ func TestTranslationsKeepTheirShortcuts(t *testing.T) {
 			if !runOfSpaces.MatchString(src) {
 				continue
 			}
+			// A label whose shortcut was lifted into a placeholder is
+			// already covered by the placeholder check, and its prose
+			// still contains articles: "Arm a watch   %1" would other-
+			// wise read its own "a" as a key the translation dropped.
+			if strings.Contains(src, "%") {
+				continue
+			}
 			// Both sides are read the same way. Asking only whether the
 			// letter appears anywhere in the translation is no test at
 			// all: "r" is inside "remover".
