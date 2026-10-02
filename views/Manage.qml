@@ -176,9 +176,16 @@ Item {
     rateDateField.text = ""
   }
 
+  // Asking first, because an older date is what figures before it convert at,
+  // so dropping one silently restates history. Every other removal in this
+  // view already asks; this one used to go straight through, including from a
+  // stray double click.
   function removeRate(r) {
     if (!r) return
-    app.run(["rate", "remove", String(r.currency), String(r.date)], I18n.tf("manage.toast.removedRate", [r.currency]))
+    confirm.cat = null
+    confirm.rate = r
+    confirm.message = I18n.tf("manage.confirmRemoveRate", [r.currency, r.date])
+    confirm.opened = true
   }
 
   // ---- payees, spec 1.5
@@ -419,8 +426,8 @@ Item {
           ? I18n.tf("manage.armedN", [view.armed.length]) + (view.app && view.app.snap && view.app.snap.monitoring === false ? I18n.t("manage.evalOff") : "")
           : view.pane === "Rates"
           ? (view.rateFor !== ""
-              ? I18n.tf("manage.datesFor", [view.rates.length, view.rateFor])
-              : I18n.tf("manage.ratesOnFile", [view.rates.length, view.base]))
+              ? I18n.tf(view.rates.length === 1 ? "manage.dateFor" : "manage.datesFor", [view.rates.length, view.rateFor])
+              : I18n.tf(view.rates.length === 1 ? "manage.rateOnFile1" : "manage.ratesOnFile", [view.rates.length, view.base]))
           : view.all.length + " categories" + (view.archivedCount > 0 ? ", " + view.archivedCount + " archived" : "")
         color: view.dimmer
         font.family: view.ff
@@ -1064,6 +1071,7 @@ Item {
   ConfirmDialog {
     id: confirm
     property var cat: null
+    property var rate: null
     anchors.fill: parent
     z: 20
     confirmText: I18n.t("payeeform.Remove")
@@ -1073,12 +1081,17 @@ Item {
     selectedText: view.app ? view.app.urgent : Color.urgent
     fontFamily: view.ff
     onConfirmed: {
-      if (confirm.cat) view.app.run(["category", "remove", String(confirm.cat.id)], "removed " + confirm.cat.name)
+      if (confirm.cat)
+        view.app.run(["category", "remove", String(confirm.cat.id)], I18n.tf("manage.toast.removedCat", [confirm.cat.name]))
+      else if (confirm.rate)
+        view.app.run(["rate", "remove", String(confirm.rate.currency), String(confirm.rate.date)],
+                     I18n.tf("manage.toast.removedRate", [confirm.rate.currency]))
       confirm.opened = false
       confirm.cat = null
+      confirm.rate = null
       view.closeEditor()
     }
-    onCanceled: { confirm.opened = false; confirm.cat = null; view.forceActiveFocus() }
+    onCanceled: { confirm.opened = false; confirm.cat = null; confirm.rate = null; view.forceActiveFocus() }
   }
 
   Loader {

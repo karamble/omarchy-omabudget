@@ -624,6 +624,10 @@
     "manage.fetchable": "Uma busca mantém estas atualizadas: %1",
     "manage.everyDateFor": "Todas as datas registradas para %1. As datas anteriores são as usadas na conversão dos valores daquele período.   b voltar",
     "manage.datesFor": "%1 datas para %2",
-    "manage.footRatesOpen": "j k mover   x remover esta data   b voltar   uma data anterior é a usada na conversão dos valores daquele período"
+    "manage.footRatesOpen": "j k mover   x remover esta data   b voltar   uma data anterior é a usada na conversão dos valores daquele período",
+    "manage.confirmRemoveRate": "Remover a taxa de %1 registrada em %2? Os valores anteriores passam a converter pela taxa abaixo dela.",
+    "manage.toast.removedCat": "%1 removida",
+    "manage.rateOnFile1": "%1 moeda, em %2",
+    "manage.dateFor": "%1 data para %2"
   }
 }

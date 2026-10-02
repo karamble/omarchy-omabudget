@@ -623,6 +623,10 @@
     "manage.fetchable": "A fetch keeps these current: %1",
     "manage.everyDateFor": "Every date on file for %1. Older dates are what figures before them convert at.   b back",
     "manage.datesFor": "%1 dates for %2",
-    "manage.footRatesOpen": "j k move   x remove this date   b back   an older date is what figures before it convert at"
+    "manage.footRatesOpen": "j k move   x remove this date   b back   an older date is what figures before it convert at",
+    "manage.confirmRemoveRate": "Remove the %1 rate filed on %2? Figures dated before it convert at the rate below it instead.",
+    "manage.toast.removedCat": "removed %1",
+    "manage.rateOnFile1": "%1 currency, in %2",
+    "manage.dateFor": "%1 date for %2"
   }
 }
