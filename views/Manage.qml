@@ -95,7 +95,7 @@ Item {
 
   // ---- actions
   function openEditor(cat) {
-    if (cat && cat.system) { view.app.lastError = cat.name + " is a system category"; return }
+    if (cat && cat.system) { view.app.lastError = I18n.tf("manage.err.system", [cat.name]); return }
     editor.editing = cat
     editor.parentHint = cat ? String(cat.parentId || cat.id) : ""
     editor.active = true
@@ -107,7 +107,7 @@ Item {
   }
   function toggleArchived(cat) {
     if (!cat) return
-    if (cat.system) { view.app.lastError = cat.name + " is a system category"; return }
+    if (cat.system) { view.app.lastError = I18n.tf("manage.err.system", [cat.name]); return }
     var back = cat.archived === true
     app.run(["category", back ? "restore" : "archive", String(cat.id)],
             (back ? "restored " : "archived ") + cat.name)
@@ -143,7 +143,7 @@ Item {
 
   function removeRate(r) {
     if (!r) return
-    app.run(["rate", "remove", String(r.currency), String(r.date)], "removed the " + r.currency + " rate")
+    app.run(["rate", "remove", String(r.currency), String(r.date)], I18n.tf("manage.toast.removedRate", [r.currency]))
   }
 
   // ---- payees, spec 1.5
@@ -214,7 +214,7 @@ Item {
   function askRemove(cat) {
     if (!cat) return
     confirm.cat = cat
-    confirm.message = "Remove " + cat.name + "? Only a category nothing points at can go."
+    confirm.message = I18n.tf("manage.confirmRemoveCat", [cat.name])
     confirm.opened = true
   }
 
@@ -375,9 +375,9 @@ Item {
         text: view.pane === "Payees"
           ? view.payees.length + (view.payees.length === 1 ? " payee" : " payees")
           : view.pane === "Alerts"
-          ? view.armed.length + " armed" + (view.app && view.app.snap && view.app.snap.monitoring === false ? ", evaluation is off" : "")
+          ? I18n.tf("manage.armedN", [view.armed.length]) + (view.app && view.app.snap && view.app.snap.monitoring === false ? I18n.t("manage.evalOff") : "")
           : view.pane === "Rates"
-          ? view.rates.length + " on file, in " + view.base
+          ? I18n.tf("manage.ratesOnFile", [view.rates.length, view.base])
           : view.all.length + " categories" + (view.archivedCount > 0 ? ", " + view.archivedCount + " archived" : "")
         color: view.dimmer
         font.family: view.ff
@@ -446,7 +446,7 @@ Item {
       Text {
         anchors.centerIn: parent
         visible: view.rows.length === 0
-        text: view.all.length === 0 ? "Loading" : "Nothing matches. Press a to add a category."
+        text: view.all.length === 0 ? I18n.t("budget.loading") : I18n.t("manage.nothingMatches")
         color: view.dim
         font.family: view.ff
         font.pixelSize: Style.font.body
@@ -914,7 +914,7 @@ Item {
               Text {
                 width: parent.width
                 text: alertRow.modelData.path + "  " + alertRow.modelData.operator
-                      + (alertRow.modelData.standing ? "  ·  every time" : "")
+                      + (alertRow.modelData.standing ? "  ·  " + I18n.t("manage.everyTime") : "")
                 color: view.fg
                 font.family: view.ff
                 font.pixelSize: Style.font.body
@@ -924,8 +924,8 @@ Item {
                 width: parent.width
                 text: (alertRow.modelData.reason ? alertRow.modelData.reason + "  ·  " : "")
                       + "to " + alertRow.modelData.deliverTo
-                      + "  ·  until " + String(alertRow.modelData.expiresAt || "").slice(0, 10)
-                      + "  ·  by " + alertRow.modelData.armedBy
+                      + "  ·  " + I18n.tf("manage.until", [String(alertRow.modelData.expiresAt || "").slice(0, 10)])
+                      + "  ·  " + I18n.tf("manage.by", [alertRow.modelData.armedBy])
                 color: view.dimmer
                 font.family: view.ff
                 font.pixelSize: Style.font.caption
@@ -963,12 +963,12 @@ Item {
       id: footer
       width: parent.width
       text: view.pane === "Payees"
-        ? "j k move   Enter rename, alias, fold in or remove   Tab rates"
+        ? I18n.t("manage.footPayees")
         : view.pane === "Alerts"
-        ? "j k move   a arm   Enter change   x disarm   Tab categories"
+        ? I18n.t("manage.footAlerts")
         : view.pane === "Rates"
-        ? "j k move   a add   x remove   Tab categories   a rate is what you put in, or what Fetch now in Settings filed"
-        : "j k move   Enter edit   a new   x archive or restore   / search   Tab payees"
+        ? I18n.t("manage.footRates")
+        : I18n.t("manage.footCats")
       color: view.dimmer
       font.family: view.ff
       font.pixelSize: Style.font.caption
@@ -981,7 +981,7 @@ Item {
     property var cat: null
     anchors.fill: parent
     z: 20
-    confirmText: "Remove"
+    confirmText: I18n.t("payeeform.Remove")
     // Cancel is what Enter lands on. The dialog defaults to preselecting
     // Confirm, which on a destructive prompt means a stray Enter destroys.
     selectedIndex: 0

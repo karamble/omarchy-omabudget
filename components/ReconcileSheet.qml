@@ -71,11 +71,11 @@ Overlay {
     if (!row) return
     var on = String(row.status) === "cleared"
     card.app.run(["edit", String(row.id), "-status", on ? "pending" : "cleared"],
-                 (on ? "took " : "put ") + (row.description || "the line") + (on ? " off" : " on") + " the statement")
+                 on ? I18n.tf("reconcile.toast.off", [row.description || I18n.t("reconcile.theLine")]) : I18n.tf("reconcile.toast.on", [row.description || I18n.t("reconcile.theLine")]))
   }
 
   function settle() {
-    if (!card.balanced) { card.app.lastError = "the sheet is out by " + card.money(card.sheet ? card.sheet.difference : 0); return }
+    if (!card.balanced) { card.app.lastError = I18n.t("reconcile.err.outBy") + card.money(card.sheet ? card.sheet.difference : 0); return }
     var argv = ["reconcile", String(card.account.id), balanceField.text.trim() === "" ? "0" : balanceField.text.trim(), "-finish"]
     if (throughField.text.trim() !== "") argv.push("-through", throughField.text.trim())
     card.app.run(argv, "settled " + card.account.name + " to " + card.money(card.sheet ? card.sheet.statement : 0))
@@ -124,7 +124,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.account ? "Reconcile " + card.account.name : "Reconcile"
+      text: card.account ? I18n.tf("reconcile.titleName", [card.account.name]) : I18n.t("reconcile.title")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -227,8 +227,8 @@ Overlay {
       width: parent.width
       visible: card.rows.length === 0
       text: card.anythingWaiting
-        ? "Everything on or before this date is on the statement."
-        : "Nothing is waiting on or before this date."
+        ? I18n.t("reconcile.everythingOnOrBefore")
+        : I18n.t("reconcile.nothingWaiting")
     }
 
     ListView {

@@ -35,8 +35,8 @@ Item {
   }
   function networkText() {
     var f = view.settings ? view.settings.lastFetch : null
-    if (!f) return "Never used"
-    return "Last used " + String(f.at || "").slice(0, 10) + ", " + String(f.host || "") + ", for exchange rates"
+    if (!f) return I18n.t("settings.neverUsed")
+    return I18n.tf("privacy.lastUsedFor", [String(f.at || "").slice(0, 10), String(f.host || "")])
   }
 
   function today() { return Qt.formatDate(new Date(), "yyyy-MM-dd") }
@@ -53,12 +53,12 @@ Item {
   function doExport() {
     var p = exportPath.text.trim()
     if (p === "") { exportPath.forceActiveFocus(); return }
-    app.run(["export", "-o", p, "-format", view.format], "exported to " + p)
+    app.run(["export", "-o", p, "-format", view.format], I18n.tf("privacy.toast.exported", [p]))
   }
   function doBackup() {
     var p = backupPath.text.trim()
     if (p === "") { backupPath.forceActiveFocus(); return }
-    app.run(["backup", "-o", p], "backed up to " + p)
+    app.run(["backup", "-o", p], I18n.tf("privacy.toast.backedUp", [p]))
   }
 
   function handleKey(e) {

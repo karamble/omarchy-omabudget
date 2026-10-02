@@ -55,17 +55,17 @@ Overlay {
     if (name === "") { nameField.forceActiveFocus(); return }
     var id = String(card.editing.id)
     // Changes queue, so a rename and an alias in one submit are two commands.
-    if (name !== card.editing.name) card.app.run(["payee", "rename", id, name], "renamed to " + name)
+    if (name !== card.editing.name) card.app.run(["payee", "rename", id, name], I18n.tf("payeeform.toast.renamed", [name]))
     if (categoryBox.value !== (card.editing.defaultCategoryId || ""))
       card.app.run(["payee", "category", id, categoryBox.value === "" ? "" : categoryBox.value],
-                   "set what " + name + " is usually booked to")
+                   I18n.tf("payeeform.toast.booked", [name]))
     if (aliasField.text.trim() !== "")
-      card.app.run(["payee", "alias", id, aliasField.text.trim()], name + " also known as " + aliasField.text.trim())
+      card.app.run(["payee", "alias", id, aliasField.text.trim()], I18n.tf("payeeform.toast.alias", [name, aliasField.text.trim()]))
     card.submitted([], "")
   }
 
   function merge() {
-    if (!card.editing || mergeBox.value === "") { card.app.lastError = "pick the payee to fold it into"; return }
+    if (!card.editing || mergeBox.value === "") { card.app.lastError = I18n.t("payeeform.err.pickFold"); return }
     card.submitted(["payee", "merge", String(card.editing.id), String(mergeBox.value)],
                    "folded " + card.editing.name + " into " + mergeBox.currentLabel())
   }
@@ -97,7 +97,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.editing ? card.editing.name : "Payee"
+      text: card.editing ? card.editing.name : I18n.t("payeeform.payee")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -136,7 +136,7 @@ Overlay {
         showLabel: false
         options: card.categoryOptions
         placeholderText: I18n.t("payeeform.TypeToFindACategory")
-        triggerLabel: value === "" ? "No usual category" : currentLabel()
+        triggerLabel: value === "" ? I18n.t("payeeform.NoUsualCategory") : currentLabel()
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
@@ -181,7 +181,7 @@ Overlay {
           showLabel: false
           options: card.mergeOptions
           placeholderText: I18n.t("payeeform.TypeToFindAPayee")
-          triggerLabel: value === "" ? "Pick a payee" : currentLabel()
+          triggerLabel: value === "" ? I18n.t("payeeform.PickAPayee") : currentLabel()
           foreground: card.fg
           accent: card.accent
           fontFamily: card.ff

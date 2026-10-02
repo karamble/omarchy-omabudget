@@ -117,7 +117,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.editing ? "Edit account" : "New account"
+      text: card.editing ? I18n.t("acctform.edit") : I18n.t("acctform.new")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -261,7 +261,7 @@ Overlay {
         visible: !!card.editing
         width: (parent.width - parent.spacing) * 0.5
         label: I18n.t("acctform.Open")
-        description: card.active ? "" : "Closed accounts stay in reports but not in forms"
+        description: card.active ? "" : I18n.t("acctform.closedStay")
         checked: card.active
         foreground: card.fg
         accent: card.accent

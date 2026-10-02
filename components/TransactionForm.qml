@@ -240,13 +240,13 @@ Overlay {
   function submit() {
     var amount = amountField.text.trim()
     if (amount === "") { amountField.forceActiveFocus(); return }
-    if (card.transfer && toBox.value === "") { card.app.lastError = "a transfer needs a destination account"; return }
+    if (card.transfer && toBox.value === "") { card.app.lastError = I18n.t("form.err.transferDest"); return }
     if (card.split) {
-      if (lineModel.count === 0) { card.app.lastError = "a split needs at least one line"; return }
+      if (lineModel.count === 0) { card.app.lastError = I18n.t("form.err.splitLine"); return }
       for (var i = 0; i < lineModel.count; i++) {
         var l = lineModel.get(i)
         if (String(l.category) === "" || String(l.amount).trim() === "") {
-          card.app.lastError = "every line needs a category and an amount"
+          card.app.lastError = I18n.t("form.err.lineNeeds")
           return
         }
       }
@@ -321,9 +321,9 @@ Overlay {
     text: {
       if (!known)
         return "no " + card.accountCurrency + " to " + card.reference
-             + " rate on file: the entry will be refused until one is added"
+             + I18n.t("form.noRateOnFile")
       var at = "at " + String(known.rate) + (known.date ? " (" + String(known.date) + ")" : "")
-      if (known.ahead) at += ", the latest on file"
+      if (known.ahead) at += I18n.t("form.latestOnFile")
       var v = card.app ? card.app.evaluate(amountField.text) : NaN
       if (!isFinite(v)) return at
       var d = card.app.decimalsFor(card.reference)
@@ -347,7 +347,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.editing ? "Edit transaction" : "New transaction"
+      text: card.editing ? I18n.t("txform.edit") : I18n.t("txform.new")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -383,7 +383,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.55
         spacing: Style.space(4)
-        Label { text: card.accountCurrency !== "" ? "AMOUNT, " + card.accountCurrency : "AMOUNT" }
+        Label { text: card.accountCurrency !== "" ? I18n.tf("form.amountCur", [card.accountCurrency]) : I18n.t("form.amount") }
         Field {
           id: amountField
           width: parent.width
@@ -454,7 +454,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.55
         spacing: Style.space(4)
-        Label { text: card.transfer ? "TO ACCOUNT" : "CATEGORY" }
+        Label { text: card.transfer ? I18n.t("quickadd.ToAccount") : I18n.t("form.category") }
         // Each picker sits in a FocusScope: a scope reports activeFocus when
         // anything inside it holds focus, which a plain Item does not, and
         // that is what tells the form a trigger is still focused.
@@ -470,7 +470,7 @@ Overlay {
             showLabel: false
             options: card.categoryOptions
             placeholderText: I18n.t("txform.TypeToFindACategory")
-            triggerLabel: value === "" ? "Uncategorised" : currentLabel()
+            triggerLabel: value === "" ? I18n.t("form.uncategorised") : currentLabel()
             foreground: card.fg
             accent: card.accent
             fontFamily: card.ff
@@ -508,7 +508,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.45
         spacing: Style.space(4)
-        Label { text: card.transfer ? "FROM ACCOUNT" : "ACCOUNT" }
+        Label { text: card.transfer ? I18n.t("form.fromAccount") : I18n.t("form.account") }
         FocusScope {
           id: accountFocus
           Keys.onEscapePressed: card.cancelled()
@@ -539,7 +539,7 @@ Overlay {
         width: parent.width
         spacing: Style.space(10)
         Button {
-          text: card.split ? "󰄬  Split into lines" : "Split into lines"
+          text: card.split ? "󰄬  " + I18n.t("txform.splitInto") : I18n.t("txform.splitInto")
           tooltipText: I18n.t("txform.BookOneAmountAcrossSeveral")
           foreground: card.split ? card.accent : card.dim
           accent: card.accent
@@ -556,9 +556,9 @@ Overlay {
         Text {
           anchors.verticalCenter: parent.verticalCenter
           visible: card.split && amountField.text.trim() !== ""
-          text: !card.remainderKnown ? "check the amounts"
-              : card.balanced ? "the lines add up"
-              : (card.remainder > 0 ? "still to place " : "over by ")
+          text: !card.remainderKnown ? I18n.t("txform.checkAmounts")
+              : card.balanced ? I18n.t("txform.linesAddUp")
+              : (card.remainder > 0 ? I18n.t("txform.stillToPlace") : I18n.t("txform.overBy"))
                 + Math.abs(card.remainder).toFixed(card.decimals) + " " + card.accountCurrency
           color: !card.split ? card.dim
                : card.balanced ? card.dim
@@ -585,7 +585,7 @@ Overlay {
             options: card.categoryOptions
             value: lineRow.category
             placeholderText: I18n.t("txform.TypeToFindACategory")
-            triggerLabel: value === "" ? "Category" : currentLabel()
+            triggerLabel: value === "" ? I18n.t("form.categoryLabel") : currentLabel()
             foreground: card.fg
             accent: card.accent
             fontFamily: card.ff

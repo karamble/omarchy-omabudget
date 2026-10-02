@@ -185,11 +185,11 @@ Item {
         Repeater {
           model: [
             { label: I18n.t("reports.AveragePerDay"), value: view.metrics ? view.money(view.metrics.averageDaily) : "",
-              sub: view.metrics ? "spent " + view.money(view.metrics.expense) + " so far" : "" },
+              sub: view.metrics ? I18n.tf("budget.spentSoFar", [view.money(view.metrics.expense)]) : "" },
             { label: I18n.t("reports.ProjectedPeriodEnd"), value: view.metrics ? view.money(view.metrics.projected) : "",
-              sub: view.metrics ? "still due " + view.money(view.metrics.recurringDue) : "" },
+              sub: view.metrics ? I18n.tf("reports.stillDue", [view.money(view.metrics.recurringDue)]) : "" },
             { label: I18n.t("reports.Runway"), value: view.metrics ? view.metrics.runwayMonths.toFixed(1) + " months" : "",
-              sub: view.metrics ? "liquid funds over " + view.money(view.metrics.trailing) + " a period" : "" },
+              sub: view.metrics ? I18n.tf("reports.liquidOver", [view.money(view.metrics.trailing)]) : "" },
             { label: I18n.t("reports.FixedShare"), value: view.metrics ? view.metrics.fixedShare + "%" : "",
               sub: I18n.t("reports.OfSpendingPostedByBills") }
           ]
@@ -417,7 +417,7 @@ Item {
           Caption { text: I18n.t("reports.IncomeAgainstExpenseTwelvePeriods") }
           GroupedBarChart {
             id: flowChart
-            emptyText: "Nothing to chart in these periods."
+            emptyText: I18n.t("reports.nothingToChart")
             progress: 0
             Behavior on progress { NumberAnimation { duration: (view.app ? view.app.moveMs : 140) * 2; easing.type: Easing.OutCubic } }
             Component.onCompleted: flowChart.progress = 1

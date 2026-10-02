@@ -137,7 +137,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.editing ? "Edit category" : (card.isChild ? "New category" : "New group")
+      text: card.editing ? I18n.t("catform.edit") : (card.isChild ? I18n.t("catform.newCat") : I18n.t("catform.newGroup"))
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -157,7 +157,7 @@ Overlay {
           accent: card.accent
           font.family: card.ff
           font.pixelSize: Style.font.body
-          placeholderText: card.isChild ? "Coffee & snacks" : "Food"
+          placeholderText: card.isChild ? I18n.t("catform.egChild") : I18n.t("catform.egGroup")
           Keys.onReturnPressed: card.submit()
           Keys.onEnterPressed: card.submit()
           Keys.onEscapePressed: card.cancelled()
@@ -212,8 +212,8 @@ Overlay {
       width: parent.width
       visible: card.isChild
       text: card.editing
-        ? (card.editing.parentName ? "Under " + card.editing.parentName + ", " + card.kind : card.kind)
-        : "It takes its group's kind: " + card.kind + "."
+        ? (card.editing.parentName ? I18n.tf("catform.underParent", [card.editing.parentName, card.kind]) : card.kind)
+        : I18n.tf("catform.takesKind", [card.kind])
     }
 
     Column {

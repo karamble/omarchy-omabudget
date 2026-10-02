@@ -125,9 +125,9 @@ Overlay {
       // Two currencies need the amount that landed on the other side, and
       // this card has nowhere to put it.
       if (card.toCurrency !== "" && card.toCurrency !== card.accountCurrency) {
-        if (card.app) card.app.lastError = "a transfer from " + card.accountCurrency
+        if (card.app) card.app.lastError = I18n.tf("quickadd.err.transferFrom", [card.accountCurrency])
                                          + " to " + card.toCurrency
-                                         + " needs the amount received: use the full form"
+                                         + I18n.t("quickadd.err.needsReceived")
         return
       }
       argv.push("-transfer-to", toBox.value)
@@ -161,9 +161,9 @@ Overlay {
     text: {
       if (!known)
         return "no " + card.accountCurrency + " to " + card.reference
-             + " rate on file: the entry will be refused until one is added"
+             + I18n.t("form.noRateOnFile")
       var at = "at " + String(known.rate) + (known.date ? " (" + String(known.date) + ")" : "")
-      if (known.ahead) at += ", the latest on file"
+      if (known.ahead) at += I18n.t("form.latestOnFile")
       var v = card.app ? card.app.evaluate(amountField.text) : NaN
       if (!isFinite(v)) return at
       var d = card.app.decimalsFor(card.reference)
@@ -227,7 +227,7 @@ Overlay {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      Label { text: card.accountCurrency !== "" ? "AMOUNT, " + card.accountCurrency : "AMOUNT" }
+      Label { text: card.accountCurrency !== "" ? I18n.tf("form.amountCur", [card.accountCurrency]) : I18n.t("form.amount") }
       Field {
         id: amountField
         placeholderText: I18n.t("quickadd.AmountArithmeticAllowed2350")
@@ -258,7 +258,7 @@ Overlay {
           showLabel: false
           options: card.categoryOptions
           placeholderText: I18n.t("quickadd.TypeToFindACategory")
-          triggerLabel: value === "" ? "Uncategorised" : currentLabel()
+          triggerLabel: value === "" ? I18n.t("form.uncategorised") : currentLabel()
           foreground: card.fg
           accent: card.accent
           fontFamily: card.ff
@@ -295,7 +295,7 @@ Overlay {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      Label { text: card.transfer ? "FROM ACCOUNT" : "ACCOUNT" }
+      Label { text: card.transfer ? I18n.t("form.fromAccount") : I18n.t("form.account") }
       FocusScope {
         id: accountFocus
         Keys.onEscapePressed: card.cancelled()

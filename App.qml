@@ -239,7 +239,7 @@ Item {
   property var queryCallback: null
 
   function query(argv, cb) {
-    if (!root.running) { if (cb) cb(null, "the daemon is not running"); return }
+    if (!root.running) { if (cb) cb(null, I18n.t("app.daemonNotRunning")); return }
     root.queryQueue.push({ argv: argv, cb: cb })
     root.pumpQueries()
   }
@@ -274,9 +274,9 @@ Item {
       var data = null
       var err = ""
       if (code === 0) {
-        try { data = JSON.parse(queryProc.out) } catch (e) { err = "unreadable answer from the helper" }
+        try { data = JSON.parse(queryProc.out) } catch (e) { err = I18n.t("app.unreadableAnswer") }
       } else {
-        err = queryProc.errText.replace(/^omabudget: /, "").split("\n")[0] || ("the helper exited with " + code)
+        err = queryProc.errText.replace(/^omabudget: /, "").split("\n")[0] || I18n.tf("app.helperExited", [code])
       }
       if (cb) cb(data, err)
       Qt.callLater(root.pumpQueries)
@@ -661,7 +661,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
             Text {
-              text: root.blurAmounts ? "amounts hidden  h" : "hide amounts  h"
+              text: root.blurAmounts ? I18n.tf("app.amountsHidden", ["h"]) : I18n.tf("app.hideAmounts", ["h"])
               color: root.dimmer
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -683,7 +683,7 @@ Item {
             width: Math.min(parent.width - Style.space(48), Style.space(520))
 
             Text {
-              text: root.built ? "The daemon is not running" : "Not built yet"
+              text: root.built ? I18n.t("app.daemonNotRunningCap") : I18n.t("app.notBuiltYet")
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.title
@@ -692,10 +692,10 @@ Item {
               width: parent.width
               wrapMode: Text.WordWrap
               text: root.built
-                ? (root.service && root.service.lastError ? root.service.lastError : "It should start on its own within a few seconds.")
+                ? (root.service && root.service.lastError ? root.service.lastError : I18n.t("app.shouldStart"))
                 : root.buildable
-                  ? "OMABUDGET ships source only. Build it once and the daemon starts on its own."
-                  : "There is no Makefile here, so this copy has the screens but not the source to build. Reinstall it with: omarchy plugin add https://github.com/karamble/omarchy-omabudget"
+                  ? I18n.t("app.shipsSource")
+                  : I18n.tf("app.noMakefileHere", ["omarchy plugin add https://github.com/karamble/omarchy-omabudget"])
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -907,7 +907,7 @@ Item {
   function build(then) {
     if (!root.buildable) {
       root.lastError = I18n.tf("app.err.noMakefile", [root.pluginDir])
-                     + ": reinstall with omarchy plugin add"
+                     + I18n.t("app.reinstallWith")
       return
     }
     Quickshell.execDetached([root.launcher,

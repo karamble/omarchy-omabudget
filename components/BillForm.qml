@@ -92,7 +92,7 @@ Overlay {
     var amount = amountField.text.trim()
     if (name === "") { nameField.forceActiveFocus(); return }
     if (amount === "") { amountField.forceActiveFocus(); return }
-    if (card.transfer && toBox.value === "") { card.app.lastError = "a transfer needs a destination account"; return }
+    if (card.transfer && toBox.value === "") { card.app.lastError = I18n.t("form.err.transferDest"); return }
     if (card.every === "custom" && intervalField.text.trim() === "") { intervalField.forceActiveFocus(); return }
     var argv
     if (card.editing) {
@@ -150,7 +150,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.editing ? "Edit bill" : "New bill"
+      text: card.editing ? I18n.t("billform.edit") : I18n.t("billform.new")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -195,7 +195,7 @@ Overlay {
       spacing: Style.space(10)
       Cell {
         share: 0.55
-        Label { text: card.transfer ? "TO ACCOUNT" : "CATEGORY" }
+        Label { text: card.transfer ? I18n.t("quickadd.ToAccount") : I18n.t("form.category") }
         SearchableDropdown {
           id: categoryBox
           visible: !card.transfer
@@ -203,7 +203,7 @@ Overlay {
           showLabel: false
           options: card.categoryOptions
           placeholderText: I18n.t("billform.TypeToFindACategory")
-          triggerLabel: value === "" ? "Uncategorised" : currentLabel()
+          triggerLabel: value === "" ? I18n.t("form.uncategorised") : currentLabel()
           foreground: card.fg
           accent: card.accent
           fontFamily: card.ff
@@ -223,7 +223,7 @@ Overlay {
       }
       Cell {
         share: 0.45
-        Label { text: card.transfer ? "FROM ACCOUNT" : "ACCOUNT" }
+        Label { text: card.transfer ? I18n.t("form.fromAccount") : I18n.t("form.account") }
         Dropdown {
           id: accountBox
           width: parent.width

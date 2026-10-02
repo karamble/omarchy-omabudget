@@ -103,7 +103,7 @@ Item {
   function removeRule(rule) {
     if (!rule) return
     confirm.rule = rule
-    confirm.message = "Remove " + rule.name + "? What it already posted stays."
+    confirm.message = I18n.tf("bills.confirmRemove", [rule.name])
     confirm.opened = true
   }
   function togglePause(rule) {
@@ -209,7 +209,7 @@ Item {
       }
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: view.due.length + " due in sixty days   " + view.rules.length + " rules"
+        text: I18n.tf("bills.dueAndRules", [view.due.length, view.rules.length])
         color: view.dimmer
         font.family: view.ff
         font.pixelSize: Style.font.caption
@@ -309,8 +309,8 @@ Item {
               Text {
                 width: parent.width
                 text: view.state(dueRow.modelData)
-                      + (dueRow.modelData.autoPost ? "  ·  posts itself" : "")
-                      + (dueRow.modelData.variableAmount ? "  ·  amount varies" : "")
+                      + (dueRow.modelData.autoPost ? "  ·  " + I18n.t("bills.postsItself") : "")
+                      + (dueRow.modelData.variableAmount ? "  ·  " + I18n.t("bills.amountVaries") : "")
                       + "  ·  " + (dueRow.modelData.kind === "transfer" ? "transfer" : dueRow.modelData.categoryName)
                       + "  ·  " + dueRow.modelData.accountName
                 color: dueRow.modelData.overdue ? (view.app ? view.app.expense : view.dimmer) : view.dimmer
@@ -410,9 +410,9 @@ Item {
                 width: parent.width
                 text: view.money(ruleRow.tpl.amount || 0, ruleRow.tpl.currency)
                       + "  ·  " + ruleRow.modelData.frequency
-                      + (ruleRow.modelData.dayRule === "last" ? ", last day" : "")
-                      + (ruleRow.modelData.autoPost ? "  ·  auto" : "")
-                      + "  ·  posted " + (ruleRow.modelData.posted || 0)
+                      + (ruleRow.modelData.dayRule === "last" ? ", " + I18n.t("bills.lastDay") : "")
+                      + (ruleRow.modelData.autoPost ? "  ·  " + I18n.t("bills.auto") : "")
+                      + "  ·  " + I18n.tf("bills.postedN", [ruleRow.modelData.posted || 0])
                 color: view.dimmer
                 font.family: view.ff
                 font.pixelSize: Style.font.caption
@@ -448,8 +448,8 @@ Item {
       id: footer
       width: parent.width
       text: view.pane === "due"
-        ? "j k move   Enter post   s skip   e edit   a new   x remove   Tab rules"
-        : "j k move   Enter edit   p pause or resume   a new   x remove   Tab due"
+        ? I18n.t("bills.footDue")
+        : I18n.t("bills.footRules")
       color: view.dimmer
       font.family: view.ff
       font.pixelSize: Style.font.caption
@@ -480,7 +480,7 @@ Item {
       anchors.margins: Style.space(16)
       spacing: Style.space(10)
       Text {
-        text: poster.bill ? "Post " + poster.bill.name : ""
+        text: poster.bill ? I18n.tf("bills.postName", [poster.bill.name]) : ""
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.title
@@ -553,7 +553,7 @@ Item {
     property var rule: null
     anchors.fill: parent
     z: 20
-    confirmText: "Remove"
+    confirmText: I18n.t("payeeform.Remove")
     // Cancel is what Enter lands on. The dialog defaults to preselecting
     // Confirm, which on a destructive prompt means a stray Enter destroys.
     selectedIndex: 0

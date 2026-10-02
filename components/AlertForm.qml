@@ -82,8 +82,8 @@ Overlay {
   }
 
   function submit() {
-    if (card.path === "") { card.app.lastError = "pick a path to watch"; return }
-    if (card.operator === "") { card.app.lastError = "pick an operator"; return }
+    if (card.path === "") { card.app.lastError = I18n.t("alertform.err.path"); return }
+    if (card.operator === "") { card.app.lastError = I18n.t("alertform.err.operator"); return }
     var argv = card.editing
       ? ["alert", "edit", String(card.editing.id), "-path", card.path, "-operator", card.operator]
       : ["arm", card.path, card.operator]
@@ -91,7 +91,7 @@ Overlay {
       if (aboveField.text.trim() !== "") argv.push("-above", aboveField.text.trim())
       if (belowField.text.trim() !== "") argv.push("-below", belowField.text.trim())
       if (aboveField.text.trim() === "" && belowField.text.trim() === "") {
-        card.app.lastError = card.operator + " needs a bound: above or below"
+        card.app.lastError = I18n.tf("alertform.err.bound", [card.operator])
         return
       }
     }
@@ -110,7 +110,7 @@ Overlay {
     if (expiresField.text.trim() !== "") argv.push("-expires-in", expiresField.text.trim())
     if (card.standing) argv.push("-standing")
     if (reasonField.text.trim() !== "") argv.push("-reason", reasonField.text.trim())
-    card.submitted(argv, (card.editing ? "changed the watch on " : "watching ") + card.path)
+    card.submitted(argv, card.editing ? I18n.tf("alertform.toast.changed", [card.path]) : I18n.tf("alertform.toast.watching", [card.path]))
   }
 
   component Label: Text {
@@ -144,7 +144,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: card.editing ? "Change this watch" : "Arm a watch"
+      text: card.editing ? I18n.t("alertform.change") : I18n.t("alertform.arm")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -161,13 +161,13 @@ Overlay {
         options: card.pathOptions
         value: card.path
         placeholderText: I18n.t("alertform.TypeToFindAPath")
-        triggerLabel: value === "" ? "Pick what to watch" : value
+        triggerLabel: value === "" ? I18n.t("alertform.pickWhat") : value
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
         onChanged: function (v) { card.path = v }
       }
-      Note { width: parent.width; text: card.leaf ? card.leaf.describes : "The catalogue is every figure and list the daemon keeps." }
+      Note { width: parent.width; text: card.leaf ? card.leaf.describes : I18n.t("alertform.catalogue") }
     }
 
     Column {
@@ -302,7 +302,7 @@ Overlay {
       spacing: Style.space(8)
       Button {
         id: saveButton
-        text: card.editing ? "Save   Enter" : "Arm   Enter"
+        text: card.editing ? I18n.tf("alertform.save", ["Enter"]) : I18n.tf("alertform.armBtn", ["Enter"])
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff

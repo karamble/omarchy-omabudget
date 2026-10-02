@@ -101,7 +101,7 @@ Item {
     var amount = planField.text.trim()
     if (amount === "") amount = "0"
     app.run(["budget", "set", String(planner.row.categoryId), amount, "-period", view.key],
-            amount === "0" ? "removed the plan for " + planner.row.name : "planned " + amount + " for " + planner.row.name)
+            amount === "0" ? I18n.tf("budget.toast.removedPlan", [planner.row.name]) : I18n.tf("budget.toast.planned", [amount, planner.row.name]))
     view.closePlan()
   }
   function plain(minor) {
@@ -129,7 +129,7 @@ Item {
     view.forceActiveFocus()
   }
   function submitPicker() {
-    if (pickCategory.value === "") { view.app.lastError = "pick a category first"; return }
+    if (pickCategory.value === "") { view.app.lastError = I18n.t("budget.err.pickCategory"); return }
     var amount = pickAmount.text.trim()
     if (amount === "") { pickAmount.forceActiveFocus(); return }
     app.run(["budget", "set", String(pickCategory.value), amount, "-period", view.key],
@@ -156,7 +156,7 @@ Item {
     var target = goalTarget.text.trim() === "" ? "0" : goalTarget.text.trim()
     var argv = ["category", "goal", String(goalCard.row.categoryId), target]
     if (target !== "0") argv.push(goalDue.text.trim())
-    app.run(argv, target === "0" ? "cleared the goal for " + goalCard.row.name : "goal set for " + goalCard.row.name)
+    app.run(argv, target === "0" ? I18n.tf("budget.toast.clearedGoal", [goalCard.row.name]) : I18n.tf("budget.toast.goalSet", [goalCard.row.name]))
     view.closeGoal()
   }
   function cycleBehaviour(row) {
@@ -165,7 +165,7 @@ Item {
     var cur = row.behaviour || (view.app ? (view.app.category(row.categoryId) || {}).behaviour : "") || "monthly"
     var next = order[(order.indexOf(cur) + 1) % order.length]
     if (next === "goal" && !(row.goalTarget > 0)) next = "untracked"
-    app.run(["category", "behaviour", String(row.categoryId), next], row.name + " is now " + next)
+    app.run(["category", "behaviour", String(row.categoryId), next], I18n.tf("budget.toast.behaviour", [row.name, next]))
   }
 
   // This view edits in place rather than behind a sheet, so a plan field can
@@ -206,22 +206,22 @@ Item {
     case Qt.Key_Return: case Qt.Key_Enter: case Qt.Key_E: view.openPlan(view.current); return true
     case Qt.Key_X:
       if (view.current && view.plannedOf(view.current) > 0)
-        app.run(["budget", "set", String(view.current.categoryId), "0", "-period", view.key], "removed the plan for " + view.current.name)
+        app.run(["budget", "set", String(view.current.categoryId), "0", "-period", view.key], I18n.tf("budget.toast.removedPlan", [view.current.name]))
       return true
     case Qt.Key_G: view.openGoal(view.current); return true
     case Qt.Key_P: view.openPicker(); return true
     case Qt.Key_B: view.cycleBehaviour(view.current); return true
     case Qt.Key_R:
       if (!view.envelope) return false
-      view.helper(["rollover"], "rolled the previous period over")
+      view.helper(["rollover"], I18n.t("budget.toast.rolled"))
       return true
     case Qt.Key_BracketLeft: view.key = view.shiftKey(view.key, -1); return true
     case Qt.Key_BracketRight: view.key = view.shiftKey(view.key, 1); return true
-    case Qt.Key_C: view.helper(["copy"], "copied the previous period"); return true
-    case Qt.Key_V: view.helper(["average", "3"], "planned from the last three periods"); return true
-    case Qt.Key_M: view.helper(["median", "12"], "planned from the median of a year"); return true
-    case Qt.Key_Plus: case Qt.Key_Equal: view.helper(["scale", "5"], "scaled by five percent"); return true
-    case Qt.Key_Minus: view.helper(["scale", "-5"], "scaled by minus five percent"); return true
+    case Qt.Key_C: view.helper(["copy"], I18n.t("budget.toast.copied")); return true
+    case Qt.Key_V: view.helper(["average", "3"], I18n.t("budget.toast.avg3")); return true
+    case Qt.Key_M: view.helper(["median", "12"], I18n.t("budget.toast.median")); return true
+    case Qt.Key_Plus: case Qt.Key_Equal: view.helper(["scale", "5"], I18n.t("budget.toast.up5")); return true
+    case Qt.Key_Minus: view.helper(["scale", "-5"], I18n.t("budget.toast.down5")); return true
     }
     return false
   }
@@ -231,16 +231,16 @@ Item {
     var out = row.behaviour || ""
     if (row.goalTarget > 0) {
       out = "goal " + view.money(row.goalTarget) + " by " + row.goalDue
-      if (row.accrual > 0) out += ", " + view.money(row.accrual) + " a period"
+      if (row.accrual > 0) out += ", " + I18n.tf("budget.aPeriod", [view.money(row.accrual)])
     }
     return out
   }
 
   function pace(row) {
     if (view.elapsedPct < 0 || !row || row.planned <= 0) return ""
-    if (row.pct > view.elapsedPct + 10) return "ahead of pace"
-    if (row.pct < view.elapsedPct - 10) return "under pace"
-    return "on pace"
+    if (row.pct > view.elapsedPct + 10) return I18n.t("budget.aheadOfPace")
+    if (row.pct < view.elapsedPct - 10) return I18n.t("budget.underPace")
+    return I18n.t("budget.onPace")
   }
   function stateColor(row) {
     if (!row || row.planned <= 0) return view.dim
@@ -284,7 +284,7 @@ Item {
         Helper { text: "["; onClicked: view.key = view.shiftKey(view.key, -1) }
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: view.monthLabel(view.key) + (view.isCurrent ? "  ·  this period" : "")
+          text: view.monthLabel(view.key) + (view.isCurrent ? "  ·  " + I18n.t("budget.thisPeriod") : "")
           color: view.fg
           font.family: view.ff
           font.pixelSize: Style.font.body
@@ -297,11 +297,11 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         visible: view.envelope ? !!view.env : !!view.doc
         text: view.envelope
-          ? (view.env ? "to be budgeted " + view.money(view.env.toBeBudgeted) + "   in pots " + view.money(view.env.held)
+          ? (view.env ? I18n.tf("budget.toBeBudgeted", [view.money(view.env.toBeBudgeted)]) + "   " + I18n.tf("budget.inPots", [view.money(view.env.held)])
               + (view.env.deficit > 0 ? "   overspent " + view.money(view.env.deficit) : "")
               + "   spent " + view.money(view.env.spent) : "")
           : (view.doc ? "planned " + view.money(view.doc.planned) + "   spent " + view.money(view.doc.spent)
-              + "   " + view.doc.pct + "% used" + (view.elapsedPct >= 0 ? "   day " + view.app.snap.period.elapsed + " of " + view.app.snap.period.days : "") : "")
+              + "   " + I18n.tf("budget.pctUsed", [view.doc.pct]) + (view.elapsedPct >= 0 ? "   day " + view.app.snap.period.elapsed + " of " + view.app.snap.period.days : "") : "")
         color: view.envelope && view.env && view.env.toBeBudgeted < 0 ? (view.app ? view.app.expense : view.fg) : view.dimmer
         font.family: view.ff
         font.pixelSize: Style.font.caption
@@ -313,18 +313,18 @@ Item {
       width: parent.width
       spacing: Style.space(8)
       Helper {
-        text: view.envelope ? "Assign a category   p" : "Plan a category   p"
+        text: view.envelope ? I18n.tf("budget.assignCategory", ["p"]) : I18n.tf("budget.planCategory", ["p"])
         tooltipText: I18n.t("budget.AnyCategoryIncludingTheOnes")
         foreground: view.fg
         onClicked: view.openPicker()
       }
-      Helper { text: I18n.tf("budget.CopyLast", ["c"]); tooltipText: I18n.t("budget.CopyThePreviousPeriodS"); onClicked: view.helper(["copy"], "copied the previous period") }
-      Helper { text: I18n.tf("budget.Average3", ["v"]); tooltipText: I18n.t("budget.PlanEveryLineFromThe"); onClicked: view.helper(["average", "3"], "planned from the last three periods") }
-      Helper { text: I18n.t("budget.Average6"); onClicked: view.helper(["average", "6"], "planned from the last six periods") }
-      Helper { text: I18n.tf("budget.Median12", ["m"]); tooltipText: I18n.t("budget.PlanEveryLineFromThe2"); onClicked: view.helper(["median", "12"], "planned from the median of a year") }
-      Helper { text: "+5%   +"; onClicked: view.helper(["scale", "5"], "scaled by five percent") }
-      Helper { text: "-5%   -"; onClicked: view.helper(["scale", "-5"], "scaled by minus five percent") }
-      Helper { visible: view.envelope; text: I18n.tf("budget.RollOver", ["r"]); tooltipText: I18n.t("budget.CarryThePreviousPeriodS"); onClicked: view.helper(["rollover"], "rolled the previous period over") }
+      Helper { text: I18n.tf("budget.CopyLast", ["c"]); tooltipText: I18n.t("budget.CopyThePreviousPeriodS"); onClicked: view.helper(["copy"], I18n.t("budget.toast.copied")) }
+      Helper { text: I18n.tf("budget.Average3", ["v"]); tooltipText: I18n.t("budget.PlanEveryLineFromThe"); onClicked: view.helper(["average", "3"], I18n.t("budget.toast.avg3")) }
+      Helper { text: I18n.t("budget.Average6"); onClicked: view.helper(["average", "6"], I18n.t("budget.toast.avg6")) }
+      Helper { text: I18n.tf("budget.Median12", ["m"]); tooltipText: I18n.t("budget.PlanEveryLineFromThe2"); onClicked: view.helper(["median", "12"], I18n.t("budget.toast.median")) }
+      Helper { text: "+5%   +"; onClicked: view.helper(["scale", "5"], I18n.t("budget.toast.up5")) }
+      Helper { text: "-5%   -"; onClicked: view.helper(["scale", "-5"], I18n.t("budget.toast.down5")) }
+      Helper { visible: view.envelope; text: I18n.tf("budget.RollOver", ["r"]); tooltipText: I18n.t("budget.CarryThePreviousPeriodS"); onClicked: view.helper(["rollover"], I18n.t("budget.toast.rolled")) }
     }
 
     // ---- the table
@@ -355,7 +355,7 @@ Item {
           spacing: Style.space(8)
           Item { width: parent.parent.parent.iconW; height: 1 }
           Caption { width: parent.parent.parent.nameW; text: I18n.t("budget.Category"); anchors.verticalCenter: parent.verticalCenter }
-          Caption { width: parent.parent.parent.numW; text: view.envelope ? "ROLLED IN" : "PLANNED"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.numW; text: view.envelope ? I18n.t("budget.rolledIn") : "PLANNED"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.numW; text: view.envelope ? "ASSIGNED" : "SPENT"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.numW; text: view.envelope ? "SPENT" : "LEFT"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.barW; text: view.envelope ? "AVAILABLE" : "USED"; leftPadding: Style.space(16); anchors.verticalCenter: parent.verticalCenter }
@@ -367,8 +367,8 @@ Item {
       Text {
         anchors.centerIn: parent
         visible: view.rows.length === 0
-        text: view.doc ? "Nothing planned and nothing spent in " + view.monthLabel(view.key) + ". Press c to copy the previous period."
-                       : "Loading"
+        text: view.doc ? I18n.tf("budget.nothingPlanned", [view.monthLabel(view.key)])
+                       : I18n.t("budget.loading")
         color: view.dim
         font.family: view.ff
         font.pixelSize: Style.font.body
@@ -437,7 +437,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               horizontalAlignment: Text.AlignRight
               text: line.pot ? (line.modelData.rolloverIn !== 0 ? view.money(line.modelData.rolloverIn) : "")
-                  : line.unplanned ? (view.envelope ? "no pot" : "no plan") : view.money(line.modelData.planned)
+                  : line.unplanned ? (view.envelope ? I18n.t("budget.noPot") : I18n.t("budget.noPlan")) : view.money(line.modelData.planned)
               color: line.pot && line.modelData.rolloverIn < 0 ? (view.app ? view.app.expense : view.fg)
                    : line.unplanned ? view.dimmer : view.fg
               font.family: view.ff
@@ -497,9 +497,9 @@ Item {
               width: list.table.paceW
               anchors.verticalCenter: parent.verticalCenter
               text: line.pot ? view.potInfo(line.modelData)
-                  : line.unplanned ? (view.envelope ? "Enter to assign" : "Enter to plan") : view.pace(line.modelData)
+                  : line.unplanned ? (view.envelope ? I18n.t("budget.enterAssign") : I18n.t("budget.enterPlan")) : view.pace(line.modelData)
               color: line.unplanned ? view.dimmer
-                   : !line.pot && view.pace(line.modelData) === "ahead of pace" ? (view.app ? view.app.nearLimit : view.dim) : view.dimmer
+                   : !line.pot && view.pace(line.modelData) === I18n.t("budget.aheadOfPace") ? (view.app ? view.app.nearLimit : view.dim) : view.dimmer
               font.family: view.ff
               font.pixelSize: Style.font.caption
               elide: Text.ElideRight
@@ -523,8 +523,8 @@ Item {
       id: footer
       width: parent.width
       text: view.envelope
-        ? "j k move   Enter assign   p any category   g goal   b pot behaviour   r roll over   x remove   [ ] period"
-        : "j k move   Enter plan   p any category   g goal   x remove   [ ] period   c copy last   v average   m median   + - scale"
+        ? I18n.t("budget.footEnv")
+        : I18n.t("budget.footLimits")
       color: view.dimmer
       font.family: view.ff
       font.pixelSize: Style.font.caption
@@ -554,7 +554,7 @@ Item {
       anchors.margins: Style.space(16)
       spacing: Style.space(10)
       Text {
-        text: (view.envelope ? "Assign to a category, " : "Plan a category, ") + view.monthLabel(view.key)
+        text: (view.envelope ? I18n.t("budget.assignTo") : I18n.t("budget.planA")) + view.monthLabel(view.key)
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.title
@@ -572,7 +572,7 @@ Item {
             showLabel: false
             options: view.plannable
             placeholderText: I18n.t("budget.TypeToFindACategory")
-            triggerLabel: value === "" ? "Pick one" : currentLabel()
+            triggerLabel: value === "" ? I18n.t("budget.pickOne") : currentLabel()
             foreground: view.fg
             accent: view.accent
             fontFamily: view.ff
@@ -652,7 +652,7 @@ Item {
       anchors.margins: Style.space(16)
       spacing: Style.space(10)
       Text {
-        text: goalCard.row ? "Goal for " + goalCard.row.name : ""
+        text: goalCard.row ? I18n.tf("budget.goalFor", [goalCard.row.name]) : ""
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.title
@@ -757,7 +757,7 @@ Item {
         font.family: view.ff
         font.pixelSize: Style.font.title
       }
-      Caption { text: view.envelope ? "ASSIGN TO THE POT, 0 TAKES IT ALL BACK" : "PLANNED AMOUNT, 0 REMOVES THE LINE" }
+      Caption { text: view.envelope ? I18n.t("budget.assignCap") : I18n.t("budget.plannedCap") }
       TextField {
         id: planField
         width: parent.width
@@ -772,7 +772,7 @@ Item {
       }
       Text {
         visible: !!planner.row
-        text: planner.row ? "spent " + view.money(planner.row.spent) + " so far" : ""
+        text: planner.row ? I18n.tf("budget.spentSoFar", [view.money(planner.row.spent)]) : ""
         color: view.dimmer
         font.family: view.ff
         font.pixelSize: Style.font.caption

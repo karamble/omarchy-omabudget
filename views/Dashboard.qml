@@ -295,7 +295,7 @@ Item {
             visible: !!view.snap && !!view.snap.period
             text: view.snap && view.snap.period
               ? view.snap.period.from + " to " + view.snap.period.to
-                + "  ·  day " + view.snap.period.elapsed + " of " + view.snap.period.days
+                + "  ·  " + I18n.tf("dash.dayOf", [view.snap.period.elapsed, view.snap.period.days])
               : ""
             color: view.dimmer
           }
@@ -462,9 +462,9 @@ Item {
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: view.envelope
-                ? "to be budgeted " + view.money(view.toBeBudgeted, view.cur)
+                ? I18n.tf("budget.toBeBudgeted", [view.money(view.toBeBudgeted, view.cur)])
                 : view.planned > 0
-                  ? view.spendPct + "% of " + view.money(view.planned, view.cur) + " budget"
+                  ? I18n.tf("dash.pctOfBudget", [view.spendPct, view.money(view.planned, view.cur)])
                   : "of " + view.money(view.earned, view.cur) + " income"
               color: view.envelope && view.toBeBudgeted < 0 ? view.expense : view.dimmer
             }
@@ -587,7 +587,7 @@ Item {
               ViewAll {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                label: view.budgetLabel !== "" ? view.budgetLabel : "View all"
+                label: view.budgetLabel !== "" ? view.budgetLabel : I18n.t("dash.ViewAll")
                 target: "budget"
               }
             }
@@ -676,7 +676,7 @@ Item {
 
             Note {
               visible: view.cards.length > 6
-              text: I18n.t("dash.And") + (view.cards.length - 6) + " more, press 4"
+              text: I18n.tf("dash.moreCards", [view.cards.length - 6])
             }
           }
         }
@@ -732,7 +732,7 @@ Item {
             formatValue: view.tickFormat
             // The legend is drawn here instead, in its own colour.
             showLegend: false
-            emptyText: "Nothing to chart yet. Press n to add a transaction."
+            emptyText: I18n.t("dash.nothingToChart")
 
             // Grown from the zero line on arrival and whenever the range
             // changes, so switching 3M to 1Y reads as a zoom rather than a
@@ -897,7 +897,7 @@ Item {
                   anchors.verticalCenter: parent.verticalCenter
                   elide: Text.ElideRight
                   text: row.modelData.description ? String(row.modelData.description)
-                      : (row.transfer ? "Transfer" : row.category)
+                      : (row.transfer ? I18n.t("tx.Transfer") : row.category)
                 }
                 Body {
                   x: recentCol.dateW + recentCol.iconW + recentCol.descW
@@ -995,7 +995,7 @@ Item {
               }
               Note {
                 visible: view.bills.length > 6
-                text: I18n.t("dash.And") + (view.bills.length - 6) + " more, press 5"
+                text: I18n.tf("dash.moreBills", [view.bills.length - 6])
                 color: view.dimmer
               }
             }
@@ -1054,7 +1054,7 @@ Item {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: I18n.t("dash.NoRateOnFileFor") + view.unconverted.join(", ")
-                  + ": left out of cash on hand and net worth. Add one under Manage, Rates."
+                  + I18n.t("dash.leftOut")
                 color: view.app ? view.app.urgent : view.fg
                 topPadding: Style.space(4)
               }
