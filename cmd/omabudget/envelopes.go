@@ -367,6 +367,7 @@ func runSettings(args []string) error {
 		PeriodStartDay int    `json:"periodStartDay"`
 		LargeAmount    int64  `json:"largeAmount"`
 		Monitoring     bool   `json:"monitoring"`
+		Language       string `json:"language"`
 		RateSource     string `json:"rateSource"`
 		RateSourceURL  string `json:"rateSourceUrl"`
 		LastFetch      *struct {
@@ -382,6 +383,8 @@ func runSettings(args []string) error {
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"baseCurrency": pos[1]}, &out)
 	case len(pos) == 2 && pos[0] == "model":
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"model": pos[1]}, &out)
+	case len(pos) == 2 && pos[0] == "language":
+		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"language": pos[1]}, &out)
 	case len(pos) == 2 && pos[0] == "period-start":
 		n, convErr := strconv.Atoi(pos[1])
 		if convErr != nil {

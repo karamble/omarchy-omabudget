@@ -3,21 +3,27 @@
   "name": "English",
   "strings": {
     "app.tagline": "Local. Private. Yours.",
-
     "app.quickAdd": "Quick add   %1",
     "app.quickAdd.tip": "Log an expense in a few keystrokes",
-
     "app.build": "Build now",
     "app.build.tip": "Runs make in the plugin directory, in a terminal",
     "app.rebuild": "Rebuild",
     "app.rebuild.tip": "Runs make in the plugin directory, then restarts the shell",
     "app.stale": "The helper is older than the source. Rebuild it, or the daemon keeps running the previous version.",
-
     "app.err.dashboard": "could not read the dashboard",
     "app.err.noAnswer": "the helper did not answer",
     "app.err.noMakefile": "no Makefile in %1",
-
     "settings.language": "INTERFACE LANGUAGE",
-    "settings.language.note": "Figures follow the language: separators and dates are written the way that language writes them."
+    "settings.language.note": "Figures follow the language: separators and dates are written the way that language writes them.",
+    "bar.tip.notBuilt": "OMABUDGET: not built yet, open to build",
+    "bar.tip.notRunning": "OMABUDGET: daemon not running",
+    "bar.tip.spent": "OMABUDGET: spent %1 %2 since %3",
+    "svc.gaveUp": "gave up after %1 restarts",
+    "svc.gaveUpBecause": "gave up after %1 restarts: %2",
+    "svc.notBuilt": "not built yet",
+    "svc.probeNoAnswer": "the build probe did not answer",
+    "num.thousands": "k",
+    "settings.card.interface": "INTERFACE",
+    "settings.language.done": "the interface is now %1"
   }
 }

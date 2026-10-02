@@ -49,6 +49,11 @@ type Config struct {
 	LargeAmount         int64  `json:"largeAmount"`
 	LargeAmountCurrency string `json:"largeAmountCurrency,omitempty"`
 
+	// Language is the interface language tag, matching a file in the plugin's
+	// i18n directory. Empty reads as English. The app builds a path out of
+	// this, so it is constrained to a tag shape rather than taken as typed.
+	Language string `json:"language,omitempty"`
+
 	// Monitoring is the master switch for alert evaluation. Nil reads as on.
 	Monitoring *bool `json:"monitoring,omitempty"`
 

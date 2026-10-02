@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "i18n"
 
 // The daemon, owned by the shell. Built when the plugin is enabled, destroyed
 // when it is disabled or removed. No systemd unit is installed.
@@ -61,8 +62,9 @@ Item {
   // What to show when nothing is running: the cause when the daemon gave one,
   // and how many attempts it took either way.
   function gaveUpMessage() {
-    var head = "gave up after " + root.maxRestarts + " restarts"
-    return root.exitReason !== "" ? head + ": " + root.exitReason : head
+    return root.exitReason !== ""
+      ? I18n.tf("svc.gaveUpBecause", [root.maxRestarts, root.exitReason])
+      : I18n.tf("svc.gaveUp", [root.maxRestarts])
   }
 
   // Passed to every child. PATH reaches notify-send in /usr/bin, HOME finds
@@ -109,7 +111,7 @@ Item {
         if (!daemon.running) daemon.running = true
         return
       }
-      root.lastError = "not built yet"
+      root.lastError = I18n.t("svc.notBuilt")
       reprobe.restart()
     }
   }
@@ -174,7 +176,7 @@ Item {
       if (!probe.running) return
       root.reap(probe.processId)
       probe.running = false
-      root.lastError = "the build probe did not answer"
+      root.lastError = I18n.t("svc.probeNoAnswer")
     }
   }
 

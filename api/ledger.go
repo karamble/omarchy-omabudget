@@ -547,6 +547,9 @@ type dashboardOut struct {
 	// either. Decimals is the minor-unit digits of every currency in play.
 	BaseCurrency  string            `json:"baseCurrency"`
 	RateReference string            `json:"rateReference"`
+	// Language rides along so the app can set its interface language from
+	// the document it already refreshes, rather than asking separately.
+	Language string `json:"language,omitempty"`
 	Decimals      map[string]int    `json:"decimals"`
 	Period        period            `json:"period"`
 	Totals        domain.Totals     `json:"totals"`
@@ -622,7 +625,8 @@ func (s *Server) dashboard(ctx context.Context, l *domain.Ledger) (dashboardOut,
 	if err != nil {
 		return dashboardOut{}, err
 	}
-	out := dashboardOut{BaseCurrency: v.base, RateReference: v.reference, Period: p, Accounts: []accountRow{}}
+	out := dashboardOut{BaseCurrency: v.base, RateReference: v.reference, Period: p, Accounts: []accountRow{},
+		Language: s.Config().Language}
 	missing := map[string]bool{}
 	for _, a := range accounts {
 		b, err := l.Balance(ctx, a.ID)

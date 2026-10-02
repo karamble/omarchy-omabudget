@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "i18n"
 
 // The glance: one glyph and this period's spending, read from the daemon on a
 // timer. Clicking opens the app as its own window.
@@ -40,9 +41,14 @@ BarWidget {
   function short(minor, currency) {
     var d = root.decimalsFor(currency)
     var v = minor / Math.pow(10, d)
-    if (Math.abs(v) >= 100000) return (v / 1000).toFixed(0) + "k"
-    if (Math.abs(v) >= 10000) return (v / 1000).toFixed(1) + "k"
-    return v.toFixed(d)
+    // toFixed always writes a dot, so the decimal mark is swapped for the
+    // locale's afterwards. The magnitude suffix is a word in some languages,
+    // so it is a key rather than a letter.
+    var dp = I18n.locale.decimalPoint
+    var k = I18n.t("num.thousands")
+    if (Math.abs(v) >= 100000) return (v / 1000).toFixed(0).replace(".", dp) + k
+    if (Math.abs(v) >= 10000) return (v / 1000).toFixed(1).replace(".", dp) + k
+    return v.toFixed(d).replace(".", dp)
   }
 
   // Minor-unit digits per currency, served with the dashboard; two until then.
@@ -115,11 +121,11 @@ BarWidget {
       // built still has something to click: the app is where the build is.
       text: ""
       labelVisible: false
-      tooltipText: !root.built ? "OMABUDGET: not built yet, open to build"
-                 : !root.running ? "OMABUDGET: daemon not running"
+      tooltipText: !root.built ? I18n.t("bar.tip.notBuilt")
+                 : !root.running ? I18n.t("bar.tip.notRunning")
                  : root.snap && root.snap.period
-                   ? "OMABUDGET: spent " + root.figure + " " + root.snap.baseCurrency
-                     + " since " + root.snap.period.from
+                   ? I18n.tf("bar.tip.spent",
+                             [root.figure, root.snap.baseCurrency, root.snap.period.from])
                    : "OMABUDGET"
       dimmed: !root.running
       onPressed: root.toggleApp()

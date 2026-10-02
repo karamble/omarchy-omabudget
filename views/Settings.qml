@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../components"
+import "../i18n"
 
 // Settings: the budgeting model, the period, exchange rates, alerts, the
 // agent endpoint and the token. Every change goes through the CLI like
@@ -12,7 +13,7 @@ Item {
   property var app: null
   readonly property bool formFocused: baseField.activeFocus || startField.activeFocus || largeField.activeFocus
     || modelGroup.activeFocus || monitoringToggle.activeFocus || mcpToggle.activeFocus
-    || sourceGroup.activeFocus || sourceUrlField.activeFocus
+    || sourceGroup.activeFocus || sourceUrlField.activeFocus || languageGroup.activeFocus
 
   readonly property color fg: app ? app.foreground : Color.foreground
   readonly property color dim: app ? app.dim : Color.foreground
@@ -65,6 +66,15 @@ Item {
   }
 
   function setModel(m) { app.run(["settings", "model", m], "budgeting model: " + m) }
+
+  // The name is shown rather than the tag, because the tag is only meaningful
+  // to the file it names.
+  function setLanguage(tag) {
+    var name = tag
+    for (var i = 0; i < I18n.available.length; i++)
+      if (I18n.available[i].tag === tag) name = I18n.available[i].name
+    app.run(["settings", "language", tag], I18n.tf("settings.language.done", [name]))
+  }
   function applyBase() {
     var code = baseField.text.trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) { view.app.lastError = "a currency is three letters"; return }
@@ -465,6 +475,26 @@ Item {
             Body { text: (view.app && view.app.running ? "Running" : "Not running") + "  ·  " + (view.app ? view.app.addr : "") }
             Body { text: "Version " + (view.app && view.app.manifest && view.app.manifest.version ? view.app.manifest.version : "dev") }
             Note { width: parent.width; text: "Listens on the loopback address only. Every read and write, this window included, goes through the CLI and the token." }
+          }
+
+          TitledCard {
+
+            app: view.app
+            width: parent.width
+            title: I18n.t("settings.card.interface")
+            Caption { text: I18n.t("settings.language") }
+            ButtonGroup {
+              id: languageGroup
+              options: I18n.available.map(function (l) { return { value: l.tag, label: l.name } })
+              value: I18n.tag
+              foreground: view.fg
+              accent: view.accent
+              fontFamily: view.ff
+              fontSize: Style.font.bodySmall
+              focusable: true
+              onChanged: function (v) { view.setLanguage(v) }
+            }
+            Note { width: parent.width; text: I18n.t("settings.language.note") }
           }
 
           TitledCard {

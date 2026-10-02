@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/karamble/omarchy-omabudget/config"
@@ -217,6 +218,11 @@ func (s *Server) handleRemoveCategory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.logger, http.StatusOK, map[string]string{"removed": id})
 }
 
+// languageTag is the shape a language tag may take. The app turns this into a
+// filename under its own i18n directory, so anything that could climb out of
+// it, or carry a separator at all, is refused here rather than at the read.
+var languageTag = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
+
 // settingsOut is what the app may change at runtime. The base is what
 // figures are shown in; the rate reference is what the ledger keeps them in
 // and quotes every rate against. The large amount is shown in the base.
@@ -227,6 +233,8 @@ type settingsOut struct {
 	PeriodStartDay int    `json:"periodStartDay"`
 	LargeAmount    int64  `json:"largeAmount"`
 	Monitoring     bool   `json:"monitoring"`
+	// Language is the interface language tag; empty reads as English.
+	Language string `json:"language"`
 	// RateSource is the source a fetch reads, resolved, and RateSourceURL
 	// the user's own instance when one is set. LastFetch is the one record
 	// kept of the network, absent until a fetch has run.
@@ -243,7 +251,7 @@ func (s *Server) settings(ctx context.Context) (settingsOut, error) {
 	out := settingsOut{
 		BaseCurrency: c.BaseCurrency, RateReference: c.BaseCurrency, Model: string(c.Model),
 		PeriodStartDay: c.PeriodStartDay, LargeAmount: c.LargeAmount, Monitoring: c.MonitoringOn(),
-		RateSource: c.RateSource, RateSourceURL: c.RateSourceURL,
+		RateSource: c.RateSource, RateSourceURL: c.RateSourceURL, Language: c.Language,
 	}
 	if out.RateSource == "" {
 		out.RateSource = feed.Sources[0].ID
@@ -297,6 +305,7 @@ type settingsIn struct {
 	LargeAmount    *string `json:"largeAmount"`
 	RateSource     *string `json:"rateSource"`
 	RateSourceURL  *string `json:"rateSourceUrl"`
+	Language       *string `json:"language"`
 }
 
 func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
@@ -374,6 +383,13 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if large != nil {
 			c.LargeAmount, c.LargeAmountCurrency = *large, c.BaseCurrency
+		}
+		if in.Language != nil {
+			tag := strings.TrimSpace(*in.Language)
+			if tag != "" && !languageTag.MatchString(tag) {
+				return fmt.Errorf("language %q: letters, digits and hyphens, like en or pt-BR", tag)
+			}
+			c.Language = tag
 		}
 		return nil
 	})

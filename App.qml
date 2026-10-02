@@ -79,6 +79,12 @@ Item {
 
   // The dashboard document, re-read after every change and on a timer.
   property var snap: null
+
+  // The interface language follows the stored setting, which rides along on
+  // the dashboard document rather than costing a query of its own. Empty is
+  // English, which is also what an unreadable tag falls back to.
+  onSnapChanged: I18n.language = (root.snap && root.snap.language) ? String(root.snap.language) : "en"
+
   property string lastError: ""
   property string toast: ""
 

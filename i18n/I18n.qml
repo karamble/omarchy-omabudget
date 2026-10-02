@@ -32,6 +32,14 @@ QtObject {
   // The active language tag. The app assigns this from the stored setting.
   property string language: "en"
 
+  // The tag becomes a filename below, so it is constrained here as well as at
+  // the daemon that stores it: a config edited by hand must not be able to
+  // reach a path with a separator in it. Anything else falls back to English.
+  readonly property string tag: {
+    var t = String(root.language || "")
+    return /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/.test(t) ? t : "en"
+  }
+
   // Parsed documents. English is always loaded and is the fallback; the active
   // language is loaded over it. Reassigned wholesale, never mutated: a binding
   // that reads t() re-evaluates when these change, and mutating in place fires
@@ -101,10 +109,10 @@ QtObject {
   }
 
   readonly property FileView activeFile: FileView {
-    path: root.dir + "/" + root.language + ".json"
+    path: root.dir + "/" + root.tag + ".json"
     blockLoading: true
     printErrors: false
-    onLoaded: root.active = root.parse(text(), root.language + ".json")
+    onLoaded: root.active = root.parse(text(), root.tag + ".json")
     onLoadFailed: root.active = ({})
   }
 }
