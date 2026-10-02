@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 import "../components"
 
 // Accounts: the list with balances on the left, the chosen account and its
@@ -169,7 +170,7 @@ Item {
       spacing: Style.space(12)
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: "Accounts"
+        text: I18n.t("accounts.Accounts")
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.heading
@@ -210,7 +211,7 @@ Item {
 
           Text {
             visible: view.accounts.length === 0
-            text: "No accounts yet. Press a to add one."
+            text: I18n.t("accounts.NoAccountsYetPressA")
             color: view.dim
             font.family: view.ff
             font.pixelSize: Style.font.body
@@ -311,21 +312,21 @@ Item {
                   app: view.app
                   glyph: "󰏫"
                   tint: view.accent
-                  hint: "Edit this account"
+                  hint: I18n.t("accounts.EditThisAccount")
                   onTriggered: { view.cursor = cardItem.index; view.openEditor(cardItem.modelData) }
                 }
                 RowAction {
                   app: view.app
                   glyph: "󰑐"
                   tint: view.accent
-                  hint: "Hold a statement against it"
+                  hint: I18n.t("accounts.HoldAStatementAgainstIt")
                   onTriggered: { view.cursor = cardItem.index; view.openSheet() }
                 }
                 RowAction {
                   app: view.app
                   glyph: "󰩺"
                   tint: view.app ? view.app.expense : view.dim
-                  hint: "Remove, if nothing points at it"
+                  hint: I18n.t("accounts.RemoveIfNothingPointsAt")
                   onTriggered: { view.cursor = cardItem.index; view.removeCurrent() }
                 }
               }
@@ -358,7 +359,7 @@ Item {
         Text {
           anchors.centerIn: parent
           visible: !view.current
-          text: "Pick an account to see it here."
+          text: I18n.t("accounts.PickAnAccountToSee")
           color: view.dim
           font.family: view.ff
           font.pixelSize: Style.font.body
@@ -411,7 +412,7 @@ Item {
             font.pixelSize: Style.font.caption
           }
 
-          Caption { text: "RECENT"; topPadding: Style.space(12) }
+          Caption { text: I18n.t("accounts.Recent"); topPadding: Style.space(12) }
         }
 
         ListView {
@@ -483,7 +484,7 @@ Item {
     Text {
       id: footer
       width: parent.width
-      text: "j k move   Enter edit   a new   x close or reopen   r reconcile   d remove"
+      text: I18n.t("accounts.JKMoveEnterEdit")
       color: view.dimmer
       font.family: view.ff
       font.pixelSize: Style.font.caption

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Quick-add, spec 4.1: amount and category, everything else optional, under
 // ten seconds. Enter submits, Escape cancels, Tab walks the fields. The card
@@ -198,7 +199,7 @@ Overlay {
     spacing: Style.space(10)
 
     Text {
-      text: "Quick add"
+      text: I18n.t("quickadd.QuickAdd")
       color: card.fg
       font.family: card.ff
       font.pixelSize: Style.font.title
@@ -207,9 +208,9 @@ Overlay {
     ButtonGroup {
       id: kindGroup
       options: [
-        { value: "expense", label: "Expense" },
-        { value: "income", label: "Income" },
-        { value: "transfer", label: "Transfer" }
+        { value: "expense", label: I18n.t("quickadd.Expense") },
+        { value: "income", label: I18n.t("quickadd.Income") },
+        { value: "transfer", label: I18n.t("quickadd.Transfer") }
       ]
       value: card.kind
       foreground: card.fg
@@ -229,7 +230,7 @@ Overlay {
       Label { text: card.accountCurrency !== "" ? "AMOUNT, " + card.accountCurrency : "AMOUNT" }
       Field {
         id: amountField
-        placeholderText: "Amount, arithmetic allowed: 23.50+18"
+        placeholderText: I18n.t("quickadd.AmountArithmeticAllowed2350")
         KeyNavigation.backtab: kindGroup
         // Tab steps straight into the picker and opens it, so typing carries
         // on without a keystroke spent opening anything.
@@ -245,7 +246,7 @@ Overlay {
       width: parent.width
       spacing: Style.space(4)
       visible: !card.transfer
-      Label { text: "CATEGORY" }
+      Label { text: I18n.t("quickadd.Category") }
       FocusScope {
         id: categoryFocus
         Keys.onEscapePressed: card.cancelled()
@@ -256,7 +257,7 @@ Overlay {
           anchors.fill: parent
           showLabel: false
           options: card.categoryOptions
-          placeholderText: "Type to find a category"
+          placeholderText: I18n.t("quickadd.TypeToFindACategory")
           triggerLabel: value === "" ? "Uncategorised" : currentLabel()
           foreground: card.fg
           accent: card.accent
@@ -271,7 +272,7 @@ Overlay {
       width: parent.width
       spacing: Style.space(4)
       visible: card.transfer
-      Label { text: "TO ACCOUNT" }
+      Label { text: I18n.t("quickadd.ToAccount") }
       FocusScope {
         id: toFocus
         Keys.onEscapePressed: card.cancelled()
@@ -316,7 +317,7 @@ Overlay {
 
     Field {
       id: descField
-      placeholderText: "Description (optional)"
+      placeholderText: I18n.t("quickadd.DescriptionOptional")
       KeyNavigation.tab: saveButton
       Keys.onBacktabPressed: function (event) { card.pickersBackward(); event.accepted = true }
     }
@@ -325,7 +326,7 @@ Overlay {
       spacing: Style.space(8)
       Button {
         id: saveButton
-        text: "Save   Enter"
+        text: I18n.tf("quickadd.Save", ["Enter"])
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
@@ -339,7 +340,7 @@ Overlay {
       }
       Button {
         id: cancelButton
-        text: "Cancel   Esc"
+        text: I18n.tf("quickadd.Cancel", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff
@@ -354,7 +355,7 @@ Overlay {
     }
 
     Text {
-      text: "Amount and category are enough. Tab from the amount to find a category: Enter picks it, Enter again saves. Escape closes a picker, then the card."
+      text: I18n.t("quickadd.AmountAndCategoryAreEnough")
       color: card.dimmer
       font.family: card.ff
       font.pixelSize: Style.font.caption

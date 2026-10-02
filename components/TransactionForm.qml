@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // The full entry form: every field of a transaction, for editing one or
 // adding one with more than quick-add offers. Emits argv for the CLI, so the
@@ -355,9 +356,9 @@ Overlay {
     ButtonGroup {
       id: kindGroup
       options: [
-        { value: "expense", label: "Expense" },
-        { value: "income", label: "Income" },
-        { value: "transfer", label: "Transfer" }
+        { value: "expense", label: I18n.t("txform.Expense") },
+        { value: "income", label: I18n.t("txform.Income") },
+        { value: "transfer", label: I18n.t("txform.Transfer") }
       ]
       value: card.kind
       foreground: card.fg
@@ -396,11 +397,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.45
         spacing: Style.space(4)
-        Label { text: "DATE" }
+        Label { text: I18n.t("txform.Date") }
         Field {
           id: dateField
           width: parent.width
-          placeholderText: "YYYY-MM-DD, today if empty"
+          placeholderText: I18n.t("txform.YyyyMmDdTodayIf")
           KeyNavigation.backtab: amountField
           Keys.onTabPressed: function (event) {
             if (card.foreign) rateField.forceActiveFocus()
@@ -420,7 +421,7 @@ Overlay {
         visible: card.foreign
         width: (parent.width - parent.spacing) * 0.5
         spacing: Style.space(4)
-        Label { text: "RATE, 1 " + card.accountCurrency + " IN " + card.reference }
+        Label { text: I18n.t("txform.Rate1") + card.accountCurrency + " IN " + card.reference }
         Field {
           id: rateField
           width: parent.width
@@ -437,11 +438,11 @@ Overlay {
         visible: card.crossCurrency
         width: (parent.width - parent.spacing) * (card.foreign ? 0.5 : 1)
         spacing: Style.space(4)
-        Label { text: "RECEIVED, " + card.toCurrency }
+        Label { text: I18n.t("txform.Received") + card.toCurrency }
         Field {
           id: receivedField
           width: parent.width
-          placeholderText: "what landed in the other account"
+          placeholderText: I18n.t("txform.WhatLandedInTheOther")
           KeyNavigation.backtab: card.foreign ? rateField : dateField
           Keys.onTabPressed: function (event) { card.pickersForward(); event.accepted = true }
         }
@@ -468,7 +469,7 @@ Overlay {
             anchors.fill: parent
             showLabel: false
             options: card.categoryOptions
-            placeholderText: "Type to find a category"
+            placeholderText: I18n.t("txform.TypeToFindACategory")
             triggerLabel: value === "" ? "Uncategorised" : currentLabel()
             foreground: card.fg
             accent: card.accent
@@ -498,7 +499,7 @@ Overlay {
         Text {
           visible: card.split && !card.transfer
           width: parent.width
-          text: "Split across the lines below"
+          text: I18n.t("txform.SplitAcrossTheLinesBelow")
           color: card.dim
           font.family: card.ff
           font.pixelSize: Style.font.body
@@ -539,7 +540,7 @@ Overlay {
         spacing: Style.space(10)
         Button {
           text: card.split ? "󰄬  Split into lines" : "Split into lines"
-          tooltipText: "Book one amount across several categories"
+          tooltipText: I18n.t("txform.BookOneAmountAcrossSeveral")
           foreground: card.split ? card.accent : card.dim
           accent: card.accent
           fontFamily: card.ff
@@ -583,7 +584,7 @@ Overlay {
             showLabel: false
             options: card.categoryOptions
             value: lineRow.category
-            placeholderText: "Type to find a category"
+            placeholderText: I18n.t("txform.TypeToFindACategory")
             triggerLabel: value === "" ? "Category" : currentLabel()
             foreground: card.fg
             accent: card.accent
@@ -610,7 +611,7 @@ Overlay {
           TextField {
             width: (parent.width - Style.space(28) - parent.spacing * 3) * 0.35
             text: lineRow.note
-            placeholderText: "Note, optional"
+            placeholderText: I18n.t("txform.NoteOptional")
             foreground: card.fg
             accent: card.accent
             font.family: card.ff
@@ -623,7 +624,7 @@ Overlay {
           }
           Button {
             text: "󰅙"
-            tooltipText: "Take this line out"
+            tooltipText: I18n.t("txform.TakeThisLineOut")
             foreground: card.dim
             accent: card.accent
             fontFamily: card.ff
@@ -642,7 +643,7 @@ Overlay {
         visible: card.split
         spacing: Style.space(8)
         Button {
-          text: "Add a line"
+          text: I18n.t("txform.AddALine")
           foreground: card.fg
           accent: card.accent
           fontFamily: card.ff
@@ -652,7 +653,7 @@ Overlay {
         }
         Button {
           visible: card.remainderKnown && !card.balanced && lineModel.count > 0
-          text: "Put the rest on the last line"
+          text: I18n.t("txform.PutTheRestOnThe")
           foreground: card.fg
           accent: card.accent
           fontFamily: card.ff
@@ -675,11 +676,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.6
         spacing: Style.space(4)
-        Label { text: "DESCRIPTION" }
+        Label { text: I18n.t("txform.Description") }
         Field {
           id: descField
           width: parent.width
-          placeholderText: "What it was"
+          placeholderText: I18n.t("txform.WhatItWas")
           KeyNavigation.tab: payeeField
           Keys.onBacktabPressed: function (event) { card.pickersBackward(); event.accepted = true }
         }
@@ -687,11 +688,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.4
         spacing: Style.space(4)
-        Label { text: "PAYEE" }
+        Label { text: I18n.t("txform.Payee") }
         Field {
           id: payeeField
           width: parent.width
-          placeholderText: "Who it went to"
+          placeholderText: I18n.t("txform.WhoItWentTo")
           KeyNavigation.tab: notesField
           KeyNavigation.backtab: descField
         }
@@ -704,11 +705,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.55
         spacing: Style.space(4)
-        Label { text: "NOTES" }
+        Label { text: I18n.t("txform.Notes") }
         Field {
           id: notesField
           width: parent.width
-          placeholderText: "Optional"
+          placeholderText: I18n.t("txform.Optional")
           KeyNavigation.tab: tagsField
           KeyNavigation.backtab: descField
         }
@@ -716,11 +717,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.45
         spacing: Style.space(4)
-        Label { text: "TAGS" }
+        Label { text: I18n.t("txform.Tags") }
         Field {
           id: tagsField
           width: parent.width
-          placeholderText: "work, client-a"
+          placeholderText: I18n.t("txform.WorkClientA")
           KeyNavigation.tab: statusGroup
           KeyNavigation.backtab: notesField
         }
@@ -730,13 +731,13 @@ Overlay {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      Label { text: "STATUS" }
+      Label { text: I18n.t("txform.Status") }
       ButtonGroup {
         id: statusGroup
         options: [
-          { value: "pending", label: "Pending" },
-          { value: "cleared", label: "Cleared" },
-          { value: "reconciled", label: "Reconciled" }
+          { value: "pending", label: I18n.t("txform.Pending") },
+          { value: "cleared", label: I18n.t("txform.Cleared") },
+          { value: "reconciled", label: I18n.t("txform.Reconciled") }
         ]
         value: card.status
         foreground: card.fg
@@ -755,7 +756,7 @@ Overlay {
       spacing: Style.space(8)
       Button {
         id: saveButton
-        text: "Save   Enter"
+        text: I18n.tf("txform.Save", ["Enter"])
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
@@ -769,7 +770,7 @@ Overlay {
       }
       Button {
         id: cancelButton
-        text: "Cancel   Esc"
+        text: I18n.tf("txform.Cancel", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff

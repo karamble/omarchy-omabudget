@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Add or edit an account. Emits argv for the CLI.
 Overlay {
@@ -29,15 +30,15 @@ Overlay {
   property bool active: editing ? editing.active !== false : true
 
   readonly property var typeOptions: [
-    { value: "checking", label: "Checking" },
-    { value: "savings", label: "Savings" },
-    { value: "cash", label: "Cash" },
-    { value: "credit_card", label: "Credit card" },
-    { value: "loan", label: "Loan" },
-    { value: "investment", label: "Investment" },
-    { value: "prepaid", label: "Prepaid" },
-    { value: "receivable", label: "Receivable" },
-    { value: "payable", label: "Payable" }
+    { value: "checking", label: I18n.t("acctform.Checking") },
+    { value: "savings", label: I18n.t("acctform.Savings") },
+    { value: "cash", label: I18n.t("acctform.Cash") },
+    { value: "credit_card", label: I18n.t("acctform.CreditCard") },
+    { value: "loan", label: I18n.t("acctform.Loan") },
+    { value: "investment", label: I18n.t("acctform.Investment") },
+    { value: "prepaid", label: I18n.t("acctform.Prepaid") },
+    { value: "receivable", label: I18n.t("acctform.Receivable") },
+    { value: "payable", label: I18n.t("acctform.Payable") }
   ]
 
   implicitHeight: col.implicitHeight + Style.space(32)
@@ -128,11 +129,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.6
         spacing: Style.space(4)
-        Label { text: "NAME" }
+        Label { text: I18n.t("acctform.Name") }
         Field {
           id: nameField
           width: parent.width
-          placeholderText: "Checking"
+          placeholderText: I18n.t("acctform.Checking")
           KeyNavigation.tab: currencyField.visible ? currencyField : openingField
           KeyNavigation.backtab: cancelButton
         }
@@ -140,7 +141,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.4
         spacing: Style.space(4)
-        Label { text: "TYPE" }
+        Label { text: I18n.t("acctform.Type") }
         Dropdown {
           id: typeBox
           width: parent.width
@@ -162,7 +163,7 @@ Overlay {
         visible: !card.editing
         width: (parent.width - parent.spacing * 2) * 0.25
         spacing: Style.space(4)
-        Label { text: "CURRENCY" }
+        Label { text: I18n.t("acctform.Currency") }
         Field {
           id: currencyField
           width: parent.width
@@ -174,7 +175,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing * 2) * (card.editing ? 0.5 : 0.35)
         spacing: Style.space(4)
-        Label { text: "OPENING BALANCE" }
+        Label { text: I18n.t("acctform.OpeningBalance") }
         Field {
           id: openingField
           width: parent.width
@@ -186,11 +187,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing * 2) * (card.editing ? 0.5 : 0.4)
         spacing: Style.space(4)
-        Label { text: "OPENING DATE" }
+        Label { text: I18n.t("acctform.OpeningDate") }
         Field {
           id: openingDateField
           width: parent.width
-          placeholderText: "YYYY-MM-DD, today if empty"
+          placeholderText: I18n.t("acctform.YyyyMmDdTodayIf")
           KeyNavigation.tab: institutionField
           KeyNavigation.backtab: openingField
         }
@@ -203,11 +204,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing * 2) * 0.5
         spacing: Style.space(4)
-        Label { text: "INSTITUTION" }
+        Label { text: I18n.t("acctform.Institution") }
         Field {
           id: institutionField
           width: parent.width
-          placeholderText: "Bank or issuer, optional"
+          placeholderText: I18n.t("acctform.BankOrIssuerOptional")
           KeyNavigation.tab: last4Field
           KeyNavigation.backtab: openingDateField
         }
@@ -215,7 +216,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing * 2) * 0.2
         spacing: Style.space(4)
-        Label { text: "LAST 4" }
+        Label { text: I18n.t("acctform.Last4") }
         Field {
           id: last4Field
           width: parent.width
@@ -228,11 +229,11 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing * 2) * 0.3
         spacing: Style.space(4)
-        Label { text: "LOW BALANCE" }
+        Label { text: I18n.t("acctform.LowBalance") }
         Field {
           id: lowField
           width: parent.width
-          placeholderText: "Warn under"
+          placeholderText: I18n.t("acctform.WarnUnder")
           KeyNavigation.tab: networthToggle
           KeyNavigation.backtab: last4Field
         }
@@ -245,7 +246,7 @@ Overlay {
       Toggle {
         id: networthToggle
         width: (parent.width - parent.spacing) * 0.5
-        label: "Counts in net worth"
+        label: I18n.t("acctform.CountsInNetWorth")
         checked: card.networth
         foreground: card.fg
         accent: card.accent
@@ -259,7 +260,7 @@ Overlay {
         id: activeToggle
         visible: !!card.editing
         width: (parent.width - parent.spacing) * 0.5
-        label: "Open"
+        label: I18n.t("acctform.Open")
         description: card.active ? "" : "Closed accounts stay in reports but not in forms"
         checked: card.active
         foreground: card.fg
@@ -276,7 +277,7 @@ Overlay {
       spacing: Style.space(8)
       Button {
         id: saveButton
-        text: "Save   Enter"
+        text: I18n.tf("acctform.Save", ["Enter"])
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
@@ -290,7 +291,7 @@ Overlay {
       }
       Button {
         id: cancelButton
-        text: "Cancel   Esc"
+        text: I18n.tf("acctform.Cancel", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff

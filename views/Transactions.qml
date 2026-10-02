@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../components"
+import "../i18n"
 
 // The ledger: every transaction, filtered and searched, with a row cursor.
 // Enter edits, d deletes with u to undo, b shows the recently deleted.
@@ -322,7 +323,7 @@ Item {
         visible: view.category !== ""
         anchors.verticalCenter: parent.verticalCenter
         text: view.categoryLabel + "   Esc"
-        tooltipText: "Only this category; Esc shows everything again"
+        tooltipText: I18n.t("tx.OnlyThisCategoryEscShows")
         foreground: view.accent
         accent: view.accent
         fontFamily: view.ff
@@ -337,7 +338,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(8)
         Button {
-          text: "New   a"
+          text: I18n.tf("tx.New", ["a"])
           foreground: view.fg
           accent: view.accent
           fontFamily: view.ff
@@ -366,7 +367,7 @@ Item {
         id: searchField
         width: Style.space(240)
         anchors.verticalCenter: parent.verticalCenter
-        placeholderText: "Search, or tag:weekly payee:market >50   /"
+        placeholderText: I18n.tf("tx.SearchOrTagWeeklyPayee", ["/"])
         foreground: view.fg
         accent: view.accent
         font.family: view.ff
@@ -379,10 +380,10 @@ Item {
         id: kindGroup
         anchors.verticalCenter: parent.verticalCenter
         options: [
-          { value: "", label: "All" },
-          { value: "expense", label: "Expenses" },
-          { value: "income", label: "Income" },
-          { value: "transfer", label: "Transfers" }
+          { value: "", label: I18n.t("tx.All") },
+          { value: "expense", label: I18n.t("tx.Expenses") },
+          { value: "income", label: I18n.t("tx.Income") },
+          { value: "transfer", label: I18n.t("tx.Transfers") }
         ]
         value: view.kind
         foreground: view.fg
@@ -397,7 +398,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(160)
         showLabel: false
-        options: [{ value: "", label: "All accounts" }].concat((view.app ? view.app.accounts : [])
+        options: [{ value: "", label: I18n.t("tx.AllAccounts") }].concat((view.app ? view.app.accounts : [])
           .map(function (a) { return { value: a.id, label: a.name } }))
         value: view.account
         foreground: view.fg
@@ -411,11 +412,11 @@ Item {
         width: Style.space(150)
         showLabel: false
         options: [
-          { value: "period", label: "This period" },
-          { value: "last", label: "Last period" },
-          { value: "3m", label: "Three periods" },
-          { value: "year", label: "Twelve periods" },
-          { value: "all", label: "All time" },
+          { value: "period", label: I18n.t("tx.ThisPeriod") },
+          { value: "last", label: I18n.t("tx.LastPeriod") },
+          { value: "3m", label: I18n.t("tx.ThreePeriods") },
+          { value: "year", label: I18n.t("tx.TwelvePeriods") },
+          { value: "all", label: I18n.t("tx.AllTime") },
           { value: "custom", label: view.customFrom !== "" ? view.customFrom + " to " + view.customTo : "Window" }
         ]
         value: view.period
@@ -455,7 +456,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           showLabel: false
           options: view.pickableCategories
-          placeholderText: "Type to find a category"
+          placeholderText: I18n.t("tx.TypeToFindACategory")
           triggerLabel: "Move them to"
           foreground: view.fg
           accent: view.accent
@@ -470,7 +471,7 @@ Item {
           accent: view.accent
           font.family: view.ff
           font.pixelSize: Style.font.bodySmall
-          placeholderText: "Tag them"
+          placeholderText: I18n.t("tx.TagThem")
           Keys.onReturnPressed: view.bulkAddTag()
           Keys.onEnterPressed: view.bulkAddTag()
           Keys.onEscapePressed: { bulkTag.text = ""; view.forceActiveFocus() }
@@ -487,7 +488,7 @@ Item {
         }
         Button {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Clear   Esc"
+          text: I18n.tf("tx.Clear", ["Esc"])
           foreground: view.dim
           accent: view.accent
           fontFamily: view.ff
@@ -528,12 +529,12 @@ Item {
           anchors.leftMargin: parent.parent.pad
           anchors.rightMargin: parent.parent.pad
           spacing: Style.space(8)
-          Caption { width: parent.parent.parent.dateW; text: "DATE"; anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.dateW; text: I18n.t("tx.Date"); anchors.verticalCenter: parent.verticalCenter }
           Item { width: parent.parent.parent.iconW; height: 1 }
-          Caption { width: parent.parent.parent.descW; text: "DESCRIPTION"; anchors.verticalCenter: parent.verticalCenter }
-          Caption { width: parent.parent.parent.categoryW; text: "CATEGORY"; anchors.verticalCenter: parent.verticalCenter }
-          Caption { width: parent.parent.parent.accountW; text: "ACCOUNT"; anchors.verticalCenter: parent.verticalCenter }
-          Caption { width: parent.parent.parent.amountW; text: "AMOUNT"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.descW; text: I18n.t("tx.Description"); anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.categoryW; text: I18n.t("tx.Category"); anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.accountW; text: I18n.t("tx.Account"); anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.amountW; text: I18n.t("tx.Amount"); horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
           Item { width: parent.parent.parent.actionsW; height: Style.spacing.hairline }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
@@ -688,7 +689,7 @@ Item {
                 visible: !view.bin
                 glyph: "󰩺"
                 tint: view.app ? view.app.expense : view.dim
-                hint: "Delete, with u to undo"
+                hint: I18n.t("tx.DeleteWithUToUndo")
                 onTriggered: { view.cursor = rowItem.index; view.deleteCurrent() }
               }
             }

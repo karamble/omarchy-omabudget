@@ -409,17 +409,30 @@ Item {
     return (neg ? "-" : "") + whole + (d > 0 ? loc.decimalPoint + frac : "")
   }
 
+  // A percentage carries a decimal mark like any other figure, so it follows
+  // the locale too. toFixed always writes a dot, hence the swap.
+  function pct(n, digits) {
+    var d = digits === undefined || digits === null ? 0 : digits
+    return Number(n).toFixed(d).replace(".", I18n.locale.decimalPoint) + "%"
+  }
+
+  function signedPct(n, digits) {
+    return (Number(n) >= 0 ? "+" : "") + root.pct(n, digits)
+  }
+
   // ---- navigation
+  // The id is what the rest of the app compares and what names the view file;
+  // only the label is shown, so only the label is translated.
   readonly property var views: [
-    { id: "dashboard", label: "Dashboard", key: "1", glyph: "󰕮" },
-    { id: "accounts", label: "Accounts", key: "2", glyph: "󰆦" },
-    { id: "transactions", label: "Transactions", key: "3", glyph: "󰈙" },
-    { id: "budget", label: "Budget", key: "4", glyph: "󰄬" },
-    { id: "bills", label: "Bills", key: "5", glyph: "󰃭" },
-    { id: "reports", label: "Reports", key: "6", glyph: "󰕮" },
-    { id: "manage", label: "Manage", key: "7", glyph: "󰅌" },
-    { id: "settings", label: "Settings", key: "8", glyph: "󰒓" },
-    { id: "privacy", label: "Data & Privacy", key: "9", glyph: "󰌾" }
+    { id: "dashboard", label: I18n.t("nav.dashboard"), key: "1", glyph: "󰕮" },
+    { id: "accounts", label: I18n.t("nav.accounts"), key: "2", glyph: "󰆦" },
+    { id: "transactions", label: I18n.t("nav.transactions"), key: "3", glyph: "󰈙" },
+    { id: "budget", label: I18n.t("nav.budget"), key: "4", glyph: "󰄬" },
+    { id: "bills", label: I18n.t("nav.bills"), key: "5", glyph: "󰃭" },
+    { id: "reports", label: I18n.t("nav.reports"), key: "6", glyph: "󰕮" },
+    { id: "manage", label: I18n.t("nav.manage"), key: "7", glyph: "󰅌" },
+    { id: "settings", label: I18n.t("nav.settings"), key: "8", glyph: "󰒓" },
+    { id: "privacy", label: I18n.t("nav.privacy"), key: "9", glyph: "󰌾" }
   ]
   property string view: "dashboard"
   property int navCursor: 0
@@ -704,7 +717,7 @@ Item {
               width: parent.width
               visible: !root.built && root.buildable
               wrapMode: Text.WrapAnywhere
-              text: "  cd " + root.pluginDir + "\n  make"
+              text: I18n.t("app.Cd") + root.pluginDir + "\n  make"
               color: root.dimmer
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

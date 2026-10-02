@@ -178,7 +178,7 @@ Item {
       spacing: Style.space(14)
 
       Text {
-        text: "Settings"
+        text: I18n.t("settings.Settings")
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.heading
@@ -197,8 +197,8 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "BUDGETING"
-            Caption { text: "SHOW FIGURES IN" }
+            title: I18n.t("settings.Budgeting")
+            Caption { text: I18n.t("settings.ShowFiguresIn") }
             Row {
               spacing: Style.space(8)
               TextField {
@@ -213,20 +213,20 @@ Item {
                 Keys.onEnterPressed: view.applyBase()
                 Keys.onEscapePressed: view.forceActiveFocus()
               }
-              Apply { text: "Apply"; onClicked: view.applyBase() }
+              Apply { text: I18n.t("settings.Apply"); onClicked: view.applyBase() }
             }
             Note {
               width: parent.width
-              text: "Every figure is converted into it at today's rate on file, so it needs a rate unless it is "
+              text: I18n.t("settings.EveryFigureIsConvertedInto")
                 + (view.settings ? view.settings.rateReference : "the reference")
                 + ", which the ledger keeps its figures in and quotes every rate against. Nothing stored moves when this changes."
             }
-            Caption { text: "MODEL"; topPadding: Style.space(6) }
+            Caption { text: I18n.t("settings.Model"); topPadding: Style.space(6) }
             ButtonGroup {
               id: modelGroup
               options: [
-                { value: "limits", label: "Category limits" },
-                { value: "envelope", label: "Envelopes" }
+                { value: "limits", label: I18n.t("settings.CategoryLimits") },
+                { value: "envelope", label: I18n.t("settings.Envelopes") }
               ]
               value: view.settings ? view.settings.model : "limits"
               foreground: view.fg
@@ -236,8 +236,8 @@ Item {
               focusable: true
               onChanged: function (v) { view.setModel(v) }
             }
-            Note { width: parent.width; text: "Limits: a planned amount per category, overspending is shown. Envelopes: money is assigned to pots first, what is left rolls over by each category's behaviour." }
-            Caption { text: "PERIOD BEGINS ON DAY"; topPadding: Style.space(6) }
+            Note { width: parent.width; text: I18n.t("settings.LimitsAPlannedAmountPer") }
+            Caption { text: I18n.t("settings.PeriodBeginsOnDay"); topPadding: Style.space(6) }
             Row {
               spacing: Style.space(8)
               TextField {
@@ -252,17 +252,17 @@ Item {
                 Keys.onEnterPressed: view.applyStart()
                 Keys.onEscapePressed: view.forceActiveFocus()
               }
-              Apply { text: "Apply"; onClicked: view.applyStart() }
+              Apply { text: I18n.t("settings.Apply"); onClicked: view.applyStart() }
             }
-            Note { width: parent.width; text: "1 to 28. Pick your payday and every period, statistic and budget follows it." }
+            Note { width: parent.width; text: I18n.t("settings.1To28PickYour") }
           }
 
           TitledCard {
 
             app: view.app
             width: parent.width
-            title: "EXCHANGE RATES"
-            Caption { text: "SOURCE" }
+            title: I18n.t("settings.ExchangeRates")
+            Caption { text: I18n.t("settings.Source") }
             ButtonGroup {
               id: sourceGroup
               options: view.sources.map(function (s) { return { value: s.id, label: s.name } })
@@ -275,7 +275,7 @@ Item {
               onChanged: function (v) { view.setSource(v) }
             }
             Note { width: parent.width; text: view.chosenSource ? view.chosenSource.what : "Choosing a source is choosing who sees your address when you press Fetch now." }
-            Caption { text: "READS FROM"; topPadding: Style.space(6); visible: view.chosenSource !== null && view.chosenSource.custom === true }
+            Caption { text: I18n.t("settings.ReadsFrom"); topPadding: Style.space(6); visible: view.chosenSource !== null && view.chosenSource.custom === true }
             Row {
               spacing: Style.space(8)
               visible: view.chosenSource !== null && view.chosenSource.custom === true
@@ -291,12 +291,12 @@ Item {
                 Keys.onEnterPressed: view.applySourceUrl()
                 Keys.onEscapePressed: view.forceActiveFocus()
               }
-              Apply { text: "Apply"; onClicked: view.applySourceUrl() }
+              Apply { text: I18n.t("settings.Apply"); onClicked: view.applySourceUrl() }
             }
             Note {
               width: parent.width
               visible: view.chosenSource !== null && view.chosenSource.custom === true
-              text: "Empty reads the public instance. An instance you run yourself is read over https, or plain http only on this machine or a private address."
+              text: I18n.t("settings.EmptyReadsThePublicInstance")
             }
             Row {
               spacing: Style.space(8)
@@ -304,20 +304,20 @@ Item {
               Apply {
                 text: view.fetching ? "Fetching" : "Fetch now"
                 enabled: !view.fetching && view.settings !== null
-                tooltipText: "One request to the source above, every currency it publishes"
+                tooltipText: I18n.t("settings.OneRequestToTheSource")
                 onClicked: view.fetchRates()
               }
-              Note { anchors.verticalCenter: parent.verticalCenter; text: "Network: " + view.lastFetchText() }
+              Note { anchors.verticalCenter: parent.verticalCenter; text: I18n.t("settings.Network") + view.lastFetchText() }
             }
             Note {
               width: parent.width
-              text: "Nothing is fetched unless you press this or run omabudget rate fetch. The whole list is read, so the request says nothing about what you hold; a rate you typed is never overwritten. Bitcoin, Decred, Litecoin and Ether are on neither source and stay hand entered under Manage."
+              text: I18n.t("settings.NothingIsFetchedUnlessYou")
             }
             Column {
               width: parent.width
               spacing: Style.space(6)
               visible: view.fetched !== null
-              Caption { text: "LAST PRESS"; topPadding: Style.space(6) }
+              Caption { text: I18n.t("settings.LastPress"); topPadding: Style.space(6) }
               Body {
                 width: parent.width
                 text: view.fetched ? "Read " + view.fetched.name + " at " + view.fetched.host + ", published " + view.fetched.published : ""
@@ -340,7 +340,7 @@ Item {
               Note {
                 width: parent.width
                 visible: view.fetched && (view.fetched.filed || []).length + (view.fetched.unchanged || []).length + (view.fetched.kept || []).length + (view.fetched.held || []).length === 0
-                text: "Nothing to file: no currency in use is quoted by this source."
+                text: I18n.t("settings.NothingToFileNoCurrency")
               }
               Repeater {
                 model: view.fetched ? (view.fetched.held || []) : []
@@ -350,11 +350,11 @@ Item {
                   spacing: Style.space(2)
                   Body {
                     width: parent.width
-                    text: "Held: 1 " + modelData.currency + " = " + modelData.rate + " " + view.reference
+                    text: I18n.t("settings.Held1") + modelData.currency + " = " + modelData.rate + " " + view.reference
                       + (modelData.previous ? "  (was " + modelData.previous + " on " + modelData.previousDate + ")" : "")
                   }
                   Note { width: parent.width; text: modelData.reason }
-                  Apply { text: "Apply " + modelData.currency; onClicked: view.acceptHeld(modelData) }
+                  Apply { text: I18n.t("settings.Apply2") + modelData.currency; onClicked: view.acceptHeld(modelData) }
                 }
               }
               Note {
@@ -382,19 +382,19 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "ALERTS"
+            title: I18n.t("settings.Alerts")
             Toggle {
               id: monitoringToggle
               width: parent.width
-              label: "Evaluate alert triggers"
-              description: "Budget lines at warn or over, bills due or overdue, large postings, low accounts"
+              label: I18n.t("settings.EvaluateAlertTriggers")
+              description: I18n.t("settings.BudgetLinesAtWarnOr")
               checked: view.settings ? view.settings.monitoring === true : true
               foreground: view.fg
               accent: view.accent
               fontFamily: view.ff
               onClicked: view.app.run(["monitoring", checked ? "off" : "on"], "monitoring " + (checked ? "off" : "on"))
             }
-            Caption { text: "LARGE AMOUNT"; topPadding: Style.space(6) }
+            Caption { text: I18n.t("settings.LargeAmount"); topPadding: Style.space(6) }
             Row {
               spacing: Style.space(8)
               TextField {
@@ -404,14 +404,14 @@ Item {
                 accent: view.accent
                 font.family: view.ff
                 font.pixelSize: Style.font.body
-                placeholderText: "off"
+                placeholderText: I18n.t("settings.Off")
                 Keys.onReturnPressed: view.applyLarge()
                 Keys.onEnterPressed: view.applyLarge()
                 Keys.onEscapePressed: view.forceActiveFocus()
               }
-              Apply { text: "Apply"; onClicked: view.applyLarge() }
+              Apply { text: I18n.t("settings.Apply"); onClicked: view.applyLarge() }
             }
-            Note { width: parent.width; text: "Postings at or above this amount appear in the large-postings list that triggers can watch. Empty turns it off." }
+            Note { width: parent.width; text: I18n.t("settings.PostingsAtOrAboveThis") }
           }
         }
 
@@ -423,19 +423,19 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "AGENT ENDPOINT"
+            title: I18n.t("settings.AgentEndpoint")
             Toggle {
               id: mcpToggle
               width: parent.width
-              label: "Answer agents over MCP"
-              description: "Tools on 127.0.0.1 only, behind the token below"
+              label: I18n.t("settings.AnswerAgentsOverMcp")
+              description: I18n.t("settings.ToolsOn12700")
               checked: view.health ? view.health.mcpEnabled === true : false
               foreground: view.fg
               accent: view.accent
               fontFamily: view.ff
               onClicked: view.app.run(["mcp-endpoint", checked ? "off" : "on"], "agent endpoint " + (checked ? "off" : "on"))
             }
-            Caption { text: "FOR YOUR AGENT'S CONFIG"; topPadding: Style.space(6) }
+            Caption { text: I18n.t("settings.ForYourAgentSConfig"); topPadding: Style.space(6) }
             Rectangle {
               width: parent.width
               height: snippet.implicitHeight + Style.space(16)
@@ -459,11 +459,11 @@ Item {
             Row {
               spacing: Style.space(8)
               Apply {
-                text: "Recycle the token"
-                tooltipText: "Every client holding the old token is locked out"
+                text: I18n.t("settings.RecycleTheToken")
+                tooltipText: I18n.t("settings.EveryClientHoldingTheOld")
                 onClicked: view.app.run(["recycle"], "a new token is in place")
               }
-              Note { anchors.verticalCenter: parent.verticalCenter; text: "h hides the token with the amounts" }
+              Note { anchors.verticalCenter: parent.verticalCenter; text: I18n.t("settings.HHidesTheTokenWith") }
             }
           }
 
@@ -471,10 +471,10 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "THE DAEMON"
+            title: I18n.t("settings.TheDaemon")
             Body { text: (view.app && view.app.running ? "Running" : "Not running") + "  ·  " + (view.app ? view.app.addr : "") }
-            Body { text: "Version " + (view.app && view.app.manifest && view.app.manifest.version ? view.app.manifest.version : "dev") }
-            Note { width: parent.width; text: "Listens on the loopback address only. Every read and write, this window included, goes through the CLI and the token." }
+            Body { text: I18n.t("settings.Version") + (view.app && view.app.manifest && view.app.manifest.version ? view.app.manifest.version : "dev") }
+            Note { width: parent.width; text: I18n.t("settings.ListensOnTheLoopbackAddress") }
           }
 
           TitledCard {
@@ -501,8 +501,8 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "THE WINDOW"
-            Note { width: parent.width; text: "Hyprland tiles this window unless told otherwise. Add to ~/.config/hypr/bindings.lua:" }
+            title: I18n.t("settings.TheWindow")
+            Note { width: parent.width; text: I18n.t("settings.HyprlandTilesThisWindowUnless") }
             Rectangle {
               width: parent.width
               height: rule.implicitHeight + Style.space(16)

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Manage: the taxonomy behind every other screen. Payees, tags and rates get
 // their own panes here in time, which is why the pane list exists.
@@ -348,7 +349,7 @@ Item {
       spacing: Style.space(12)
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: "Manage"
+        text: I18n.t("manage.Manage")
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.heading
@@ -356,7 +357,11 @@ Item {
       ButtonGroup {
         visible: view.panes.length > 1
         anchors.verticalCenter: parent.verticalCenter
-        options: view.panes.map(function (p) { return { value: p, label: p } })
+        options: view.panes.map(function (p) {
+          // The value stays the English identifier the rest of this view
+          // compares against; only what is shown is translated.
+          return { value: p, label: I18n.t("manage.pane." + p.toLowerCase()) }
+        })
         value: view.pane
         foreground: view.fg
         accent: view.accent
@@ -388,7 +393,7 @@ Item {
         id: searchField
         width: Style.space(240)
         anchors.verticalCenter: parent.verticalCenter
-        placeholderText: "Search   /"
+        placeholderText: I18n.tf("manage.Search", ["/"])
         foreground: view.fg
         accent: view.accent
         font.family: view.ff
@@ -399,7 +404,7 @@ Item {
       }
       Button {
         anchors.verticalCenter: parent.verticalCenter
-        text: "New   a"
+        text: I18n.tf("manage.New", ["a"])
         foreground: view.fg
         accent: view.accent
         fontFamily: view.ff
@@ -428,12 +433,12 @@ Item {
         id: head
         width: parent.width
         height: Style.space(30)
-        Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: "CATEGORY" }
+        Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.Category") }
         Caption {
           anchors.right: parent.right
           anchors.rightMargin: Style.space(12)
           anchors.verticalCenter: parent.verticalCenter
-          text: "POT AND FLAGS"
+          text: I18n.t("manage.PotAndFlags")
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
       }
@@ -510,22 +515,22 @@ Item {
             }
             Badge {
               visible: row.cat.goalTarget > 0
-              text: "goal " + (view.app ? view.app.fmt(row.cat.goalTarget, view.app.snap ? view.app.snap.baseCurrency : "") : "")
+              text: I18n.t("manage.Goal") + (view.app ? view.app.fmt(row.cat.goalTarget, view.app.snap ? view.app.snap.baseCurrency : "") : "")
                     + (row.cat.goalDue ? " by " + row.cat.goalDue : "")
               color: view.dim
             }
             Badge {
               visible: row.cat.excludedFromStatistics === true
-              text: "not in statistics"
+              text: I18n.t("manage.NotInStatistics")
             }
             Badge {
               visible: row.cat.archived === true
-              text: "archived"
+              text: I18n.t("manage.Archived")
               color: view.app ? view.app.nearLimit : view.dimmer
             }
             Badge {
               visible: row.cat.system === true
-              text: "system"
+              text: I18n.t("manage.System")
             }
           }
           MouseArea {
@@ -555,7 +560,7 @@ Item {
           id: currencyField
           width: Style.space(90)
           anchors.verticalCenter: parent.verticalCenter
-          placeholderText: "USD"
+          placeholderText: I18n.t("manage.Usd")
           maximumLength: 3
           foreground: view.fg
           accent: view.accent
@@ -581,7 +586,7 @@ Item {
           id: rateDateField
           width: Style.space(160)
           anchors.verticalCenter: parent.verticalCenter
-          placeholderText: "YYYY-MM-DD, today if empty"
+          placeholderText: I18n.t("manage.YyyyMmDdTodayIf")
           foreground: view.fg
           accent: view.accent
           font.family: view.ff
@@ -592,7 +597,7 @@ Item {
         }
         Button {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Add   a"
+          text: I18n.tf("manage.Add", ["a"])
           foreground: view.fg
           accent: view.accent
           fontFamily: view.ff
@@ -622,10 +627,10 @@ Item {
           id: rateHead
           width: parent.width
           height: Style.space(30)
-          Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: "FROM" }
-          Caption { x: Style.space(140); anchors.verticalCenter: parent.verticalCenter; text: "CURRENCY" }
-          Caption { x: Style.space(260); anchors.verticalCenter: parent.verticalCenter; text: "RATE" }
-          Caption { x: Style.space(500); anchors.verticalCenter: parent.verticalCenter; text: "SOURCE" }
+          Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.From") }
+          Caption { x: Style.space(140); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.Currency") }
+          Caption { x: Style.space(260); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.Rate") }
+          Caption { x: Style.space(500); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.Source") }
           Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
         }
         Text {
@@ -634,7 +639,7 @@ Item {
           width: parent.width - Style.space(40)
           horizontalAlignment: Text.AlignHCenter
           wrapMode: Text.WordWrap
-          text: "No rates yet. An account in another currency needs one to be counted in liquid funds and net worth; without it every entry has to carry its own."
+          text: I18n.t("manage.NoRatesYetAnAccount")
           color: view.dim
           font.family: view.ff
           font.pixelSize: Style.font.body
@@ -722,12 +727,12 @@ Item {
         id: payeeHead
         width: parent.width
         height: Style.space(30)
-        Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: "PAYEE" }
+        Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.Payee") }
         Caption {
           anchors.right: parent.right
           anchors.rightMargin: Style.space(12)
           anchors.verticalCenter: parent.verticalCenter
-          text: "ON"
+          text: I18n.t("manage.On")
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
       }
@@ -737,7 +742,7 @@ Item {
         width: parent.width - Style.space(40)
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: "No payees yet. Name one on a transaction and it appears here, where it can be renamed, given the spellings a statement uses, or folded into another."
+        text: I18n.t("manage.NoPayeesYetNameOne")
         color: view.dim
         font.family: view.ff
         font.pixelSize: Style.font.body
@@ -826,7 +831,7 @@ Item {
         width: parent.width
         spacing: Style.space(10)
         Button {
-          text: "Arm a watch   a"
+          text: I18n.tf("manage.ArmAWatch", ["a"])
           foreground: view.fg
           accent: view.accent
           fontFamily: view.ff
@@ -836,7 +841,7 @@ Item {
         }
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Alarms go to the desktop. Evaluation is switched on in Settings."
+          text: I18n.t("manage.AlarmsGoToTheDesktop")
           color: view.dimmer
           font.family: view.ff
           font.pixelSize: Style.font.caption
@@ -856,12 +861,12 @@ Item {
           id: alertHead
           width: parent.width
           height: Style.space(30)
-          Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: "WATCHING" }
+          Caption { x: Style.space(12); anchors.verticalCenter: parent.verticalCenter; text: I18n.t("manage.Watching") }
           Caption {
             anchors.right: parent.right
             anchors.rightMargin: Style.space(12)
             anchors.verticalCenter: parent.verticalCenter
-            text: "STATE"
+            text: I18n.t("manage.State")
           }
           Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: Style.spacing.hairline; color: view.border }
         }
@@ -871,7 +876,7 @@ Item {
           width: parent.width - Style.space(40)
           horizontalAlignment: Text.AlignHCenter
           wrapMode: Text.WordWrap
-          text: "Nothing armed. Press a to watch a budget line going over, a bill slipping past its date, a large posting, or an account running low."
+          text: I18n.t("manage.NothingArmedPressATo")
           color: view.dim
           font.family: view.ff
           font.pixelSize: Style.font.body

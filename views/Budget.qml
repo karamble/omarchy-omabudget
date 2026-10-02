@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // The plan for one period, category by category, against what was spent.
 // Enter sets a line, [ and ] move between periods, and the helpers fill a
@@ -272,7 +273,7 @@ Item {
       spacing: Style.space(12)
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: "Budget"
+        text: I18n.t("budget.Budget")
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.heading
@@ -313,17 +314,17 @@ Item {
       spacing: Style.space(8)
       Helper {
         text: view.envelope ? "Assign a category   p" : "Plan a category   p"
-        tooltipText: "Any category, including the ones with nothing on them yet"
+        tooltipText: I18n.t("budget.AnyCategoryIncludingTheOnes")
         foreground: view.fg
         onClicked: view.openPicker()
       }
-      Helper { text: "Copy last   c"; tooltipText: "Copy the previous period's lines here"; onClicked: view.helper(["copy"], "copied the previous period") }
-      Helper { text: "Average 3   v"; tooltipText: "Plan every line from the average of the last three periods"; onClicked: view.helper(["average", "3"], "planned from the last three periods") }
-      Helper { text: "Average 6"; onClicked: view.helper(["average", "6"], "planned from the last six periods") }
-      Helper { text: "Median 12   m"; tooltipText: "Plan every line from the median of the last twelve periods"; onClicked: view.helper(["median", "12"], "planned from the median of a year") }
+      Helper { text: I18n.tf("budget.CopyLast", ["c"]); tooltipText: I18n.t("budget.CopyThePreviousPeriodS"); onClicked: view.helper(["copy"], "copied the previous period") }
+      Helper { text: I18n.tf("budget.Average3", ["v"]); tooltipText: I18n.t("budget.PlanEveryLineFromThe"); onClicked: view.helper(["average", "3"], "planned from the last three periods") }
+      Helper { text: I18n.t("budget.Average6"); onClicked: view.helper(["average", "6"], "planned from the last six periods") }
+      Helper { text: I18n.tf("budget.Median12", ["m"]); tooltipText: I18n.t("budget.PlanEveryLineFromThe2"); onClicked: view.helper(["median", "12"], "planned from the median of a year") }
       Helper { text: "+5%   +"; onClicked: view.helper(["scale", "5"], "scaled by five percent") }
       Helper { text: "-5%   -"; onClicked: view.helper(["scale", "-5"], "scaled by minus five percent") }
-      Helper { visible: view.envelope; text: "Roll over   r"; tooltipText: "Carry the previous period's pots into this one"; onClicked: view.helper(["rollover"], "rolled the previous period over") }
+      Helper { visible: view.envelope; text: I18n.tf("budget.RollOver", ["r"]); tooltipText: I18n.t("budget.CarryThePreviousPeriodS"); onClicked: view.helper(["rollover"], "rolled the previous period over") }
     }
 
     // ---- the table
@@ -353,7 +354,7 @@ Item {
           anchors.rightMargin: parent.parent.pad
           spacing: Style.space(8)
           Item { width: parent.parent.parent.iconW; height: 1 }
-          Caption { width: parent.parent.parent.nameW; text: "CATEGORY"; anchors.verticalCenter: parent.verticalCenter }
+          Caption { width: parent.parent.parent.nameW; text: I18n.t("budget.Category"); anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.numW; text: view.envelope ? "ROLLED IN" : "PLANNED"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.numW; text: view.envelope ? "ASSIGNED" : "SPENT"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
           Caption { width: parent.parent.parent.numW; text: view.envelope ? "SPENT" : "LEFT"; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
@@ -564,13 +565,13 @@ Item {
         Column {
           width: (parent.width - parent.spacing) * 0.6
           spacing: Style.space(4)
-          Caption { text: "CATEGORY" }
+          Caption { text: I18n.t("budget.Category") }
           SearchableDropdown {
             id: pickCategory
             width: parent.width
             showLabel: false
             options: view.plannable
-            placeholderText: "Type to find a category"
+            placeholderText: I18n.t("budget.TypeToFindACategory")
             triggerLabel: value === "" ? "Pick one" : currentLabel()
             foreground: view.fg
             accent: view.accent
@@ -597,7 +598,7 @@ Item {
         }
       }
       Text {
-        text: "A category with nothing on it yet never appears in the table, so this is where it joins the plan."
+        text: I18n.t("budget.ACategoryWithNothingOn")
         color: view.dimmer
         font.family: view.ff
         font.pixelSize: Style.font.caption
@@ -607,7 +608,7 @@ Item {
       Row {
         spacing: Style.space(8)
         Button {
-          text: "Save   Enter"
+          text: I18n.tf("budget.Save", ["Enter"])
           foreground: view.fg
           accent: view.accent
           fontFamily: view.ff
@@ -616,7 +617,7 @@ Item {
           onClicked: view.submitPicker()
         }
         Button {
-          text: "Cancel   Esc"
+          text: I18n.tf("budget.Cancel", ["Esc"])
           foreground: view.dim
           accent: view.accent
           fontFamily: view.ff
@@ -662,7 +663,7 @@ Item {
         Column {
           width: (parent.width - parent.spacing) * 0.5
           spacing: Style.space(4)
-          Caption { text: "TARGET, 0 CLEARS" }
+          Caption { text: I18n.t("budget.Target0Clears") }
           TextField {
             id: goalTarget
             width: parent.width
@@ -680,7 +681,7 @@ Item {
         Column {
           width: (parent.width - parent.spacing) * 0.5
           spacing: Style.space(4)
-          Caption { text: "DUE, YYYY-MM" }
+          Caption { text: I18n.t("budget.DueYyyyMm") }
           TextField {
             id: goalDue
             width: parent.width
@@ -697,7 +698,7 @@ Item {
         }
       }
       Text {
-        text: "The pot keeps what is left each period and the app suggests what to put in to reach the target in time."
+        text: I18n.t("budget.ThePotKeepsWhatIs")
         color: view.dimmer
         font.family: view.ff
         font.pixelSize: Style.font.caption
@@ -707,7 +708,7 @@ Item {
       Row {
         spacing: Style.space(8)
         Button {
-          text: "Save   Enter"
+          text: I18n.tf("budget.Save", ["Enter"])
           foreground: view.fg
           accent: view.accent
           fontFamily: view.ff
@@ -716,7 +717,7 @@ Item {
           onClicked: view.submitGoal()
         }
         Button {
-          text: "Cancel   Esc"
+          text: I18n.tf("budget.Cancel", ["Esc"])
           foreground: view.dim
           accent: view.accent
           fontFamily: view.ff
@@ -779,7 +780,7 @@ Item {
       Row {
         spacing: Style.space(8)
         Button {
-          text: "Save   Enter"
+          text: I18n.tf("budget.Save", ["Enter"])
           foreground: view.fg
           accent: view.accent
           fontFamily: view.ff
@@ -788,7 +789,7 @@ Item {
           onClicked: view.submitPlan()
         }
         Button {
-          text: "Cancel   Esc"
+          text: I18n.tf("budget.Cancel", ["Esc"])
           foreground: view.dim
           accent: view.accent
           fontFamily: view.ff

@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../charts"
+import "../i18n"
 
 // Reports: the headline metrics, spending by category against the period
 // before, and cash flow over the year. Enter opens a category's lines, t
@@ -162,7 +163,7 @@ Item {
         spacing: Style.space(12)
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: "Reports"
+          text: I18n.t("reports.Reports")
           color: view.fg
           font.family: view.ff
           font.pixelSize: Style.font.heading
@@ -183,14 +184,14 @@ Item {
         readonly property real tileW: (width - spacing * 3) / 4
         Repeater {
           model: [
-            { label: "AVERAGE PER DAY", value: view.metrics ? view.money(view.metrics.averageDaily) : "",
+            { label: I18n.t("reports.AveragePerDay"), value: view.metrics ? view.money(view.metrics.averageDaily) : "",
               sub: view.metrics ? "spent " + view.money(view.metrics.expense) + " so far" : "" },
-            { label: "PROJECTED PERIOD END", value: view.metrics ? view.money(view.metrics.projected) : "",
+            { label: I18n.t("reports.ProjectedPeriodEnd"), value: view.metrics ? view.money(view.metrics.projected) : "",
               sub: view.metrics ? "still due " + view.money(view.metrics.recurringDue) : "" },
-            { label: "RUNWAY", value: view.metrics ? view.metrics.runwayMonths.toFixed(1) + " months" : "",
+            { label: I18n.t("reports.Runway"), value: view.metrics ? view.metrics.runwayMonths.toFixed(1) + " months" : "",
               sub: view.metrics ? "liquid funds over " + view.money(view.metrics.trailing) + " a period" : "" },
-            { label: "FIXED SHARE", value: view.metrics ? view.metrics.fixedShare + "%" : "",
-              sub: "of spending posted by bills" }
+            { label: I18n.t("reports.FixedShare"), value: view.metrics ? view.metrics.fixedShare + "%" : "",
+              sub: I18n.t("reports.OfSpendingPostedByBills") }
           ]
           delegate: Card {
             required property var modelData
@@ -229,7 +230,7 @@ Item {
           Row {
             width: parent.width
             spacing: Style.space(10)
-            Caption { anchors.verticalCenter: parent.verticalCenter; text: "SPENDING BY CATEGORY" }
+            Caption { anchors.verticalCenter: parent.verticalCenter; text: I18n.t("reports.SpendingByCategory") }
             Row {
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(4)
@@ -246,7 +247,7 @@ Item {
 
           Body {
             visible: view.rows.length === 0
-            text: "Nothing spent in this window or the one before."
+            text: I18n.t("reports.NothingSpentInThisWindow")
             color: view.dim
           }
 
@@ -258,10 +259,10 @@ Item {
             spacing: Style.space(8)
             Item { width: Style.space(24) + Style.space(190); height: 1 }
             Item { width: parent.width - Style.space(24) - Style.space(190) - Style.space(110) * 4 - Style.space(8) * 7 - Style.space(16); height: 1 }
-            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: "SPENT" }
-            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: "SHARE" }
-            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: "VS BEFORE" }
-            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: "VS PLAN" }
+            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: I18n.t("reports.Spent") }
+            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: I18n.t("reports.Share") }
+            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: I18n.t("reports.VsBefore") }
+            Caption { width: Style.space(110); horizontalAlignment: Text.AlignRight; text: I18n.t("reports.VsPlan") }
           }
 
           Repeater {
@@ -321,7 +322,7 @@ Item {
                     horizontalAlignment: Text.AlignRight
                     anchors.verticalCenter: parent.verticalCenter
                     text: group.modelData.deltaPct !== undefined && group.modelData.deltaPct !== null
-                      ? (group.modelData.deltaPct > 0 ? "+" : "") + Number(group.modelData.deltaPct).toFixed(1) + "%"
+                      ? (view.app ? view.app.signedPct(group.modelData.deltaPct, 1) : "")
                       : group.modelData.delta > 0 ? "new" : ""
                     color: group.modelData.delta > 0 ? (view.app ? view.app.expense : view.fg) : (view.app ? view.app.income : view.fg)
                     font.pixelSize: Style.font.bodySmall
@@ -395,7 +396,7 @@ Item {
           }
 
           Caption {
-            text: "j k move   Enter open   t transactions   [ ] period"
+            text: I18n.t("reports.JKMoveEnterOpen")
             font.letterSpacing: 0
             topPadding: Style.space(4)
           }
@@ -413,7 +414,7 @@ Item {
           anchors.top: parent.top
           anchors.margins: Style.space(14)
           spacing: Style.space(10)
-          Caption { text: "INCOME AGAINST EXPENSE, TWELVE PERIODS" }
+          Caption { text: I18n.t("reports.IncomeAgainstExpenseTwelvePeriods") }
           GroupedBarChart {
             id: flowChart
             emptyText: "Nothing to chart in these periods."
@@ -424,9 +425,9 @@ Item {
             height: Style.space(200)
             labels: view.months.map(function (m) { return m.label })
             series: [
-              { label: "Income", color: view.app ? view.app.income : view.accent, values: view.months.map(function (m) { return m.income }) },
-              { label: "Expenses", color: view.app ? view.app.expense : view.fg, values: view.months.map(function (m) { return m.expense }) },
-              { label: "Net", color: view.app ? view.app.net : view.fg, values: view.months.map(function (m) { return m.net }) }
+              { label: I18n.t("reports.Income"), color: view.app ? view.app.income : view.accent, values: view.months.map(function (m) { return m.income }) },
+              { label: I18n.t("reports.Expenses"), color: view.app ? view.app.expense : view.fg, values: view.months.map(function (m) { return m.expense }) },
+              { label: I18n.t("reports.Net"), color: view.app ? view.app.net : view.fg, values: view.months.map(function (m) { return m.net }) }
             ]
             axisColor: view.dimmer
             gridColor: view.border
@@ -439,11 +440,11 @@ Item {
           Row {
             width: parent.width
             spacing: Style.space(8)
-            Caption { width: Style.space(60); text: "PERIOD" }
-            Caption { width: Style.space(120); text: "INCOME"; horizontalAlignment: Text.AlignRight }
-            Caption { width: Style.space(120); text: "EXPENSE"; horizontalAlignment: Text.AlignRight }
-            Caption { width: Style.space(120); text: "NET"; horizontalAlignment: Text.AlignRight }
-            Caption { width: Style.space(90); text: "SAVED"; horizontalAlignment: Text.AlignRight }
+            Caption { width: Style.space(60); text: I18n.t("reports.Period") }
+            Caption { width: Style.space(120); text: I18n.t("reports.Income2"); horizontalAlignment: Text.AlignRight }
+            Caption { width: Style.space(120); text: I18n.t("reports.Expense"); horizontalAlignment: Text.AlignRight }
+            Caption { width: Style.space(120); text: I18n.t("reports.Net2"); horizontalAlignment: Text.AlignRight }
+            Caption { width: Style.space(90); text: I18n.t("reports.Saved"); horizontalAlignment: Text.AlignRight }
           }
           Repeater {
             model: view.months.slice().reverse()

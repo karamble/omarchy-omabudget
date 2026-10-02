@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Arm a watch on one of the catalogue's paths. Until now only an agent over
 // MCP could do this, which is a strange place to keep the one subsystem whose
@@ -152,14 +153,14 @@ Overlay {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      Label { text: "WATCH" }
+      Label { text: I18n.t("alertform.Watch") }
       SearchableDropdown {
         id: pathBox
         width: parent.width
         showLabel: false
         options: card.pathOptions
         value: card.path
-        placeholderText: "Type to find a path"
+        placeholderText: I18n.t("alertform.TypeToFindAPath")
         triggerLabel: value === "" ? "Pick what to watch" : value
         foreground: card.fg
         accent: card.accent
@@ -173,7 +174,7 @@ Overlay {
       width: parent.width
       spacing: Style.space(4)
       visible: card.operatorOptions.length > 0
-      Label { text: "WHEN IT" }
+      Label { text: I18n.t("alertform.WhenIt") }
       ButtonGroup {
         id: operatorGroup
         options: card.operatorOptions
@@ -195,43 +196,43 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.5
         spacing: Style.space(4)
-        Label { text: "ABOVE" }
+        Label { text: I18n.t("alertform.Above") }
         Field { id: aboveField; width: parent.width; placeholderText: "0" }
       }
       Column {
         width: (parent.width - parent.spacing) * 0.5
         spacing: Style.space(4)
-        Label { text: "OR BELOW" }
+        Label { text: I18n.t("alertform.OrBelow") }
         Field { id: belowField; width: parent.width; placeholderText: "10" }
       }
     }
     Note {
       width: parent.width
       visible: card.takesBound
-      text: "One of the two: a watch fires on the sample that carries the figure past the bound."
+      text: I18n.t("alertform.OneOfTheTwoA")
     }
 
     Column {
       width: parent.width
       spacing: Style.space(4)
       visible: card.takesValue
-      Label { text: "BECOMES" }
-      Field { id: valueField; width: parent.width; placeholderText: "true" }
+      Label { text: I18n.t("alertform.Becomes") }
+      Field { id: valueField; width: parent.width; placeholderText: I18n.t("alertform.True") }
     }
 
     Column {
       width: parent.width
       spacing: Style.space(4)
       visible: card.takesAge
-      Label { text: "OLDER THAN" }
-      Field { id: olderField; width: parent.width; placeholderText: "72h" }
+      Label { text: I18n.t("alertform.OlderThan") }
+      Field { id: olderField; width: parent.width; placeholderText: I18n.t("alertform.72h") }
     }
 
     Column {
       width: parent.width
       spacing: Style.space(4)
       visible: card.takesFilter
-      Label { text: "ONLY THE ONES WHERE" }
+      Label { text: I18n.t("alertform.OnlyTheOnesWhere") }
       Row {
         width: parent.width
         spacing: Style.space(8)
@@ -248,7 +249,7 @@ Overlay {
         ButtonGroup {
           id: whereOp
           anchors.verticalCenter: parent.verticalCenter
-          options: [{ value: "=", label: "is" }, { value: "~=", label: "contains" }]
+          options: [{ value: "=", label: I18n.t("alertform.Is") }, { value: "~=", label: I18n.t("alertform.Contains") }]
           value: "="
           foreground: card.fg
           accent: card.accent
@@ -261,7 +262,7 @@ Overlay {
         Field {
           id: whereValue
           width: (parent.width - parent.spacing * 2) * 0.35
-          placeholderText: "Checking"
+          placeholderText: I18n.t("alertform.Checking")
         }
       }
     }
@@ -272,22 +273,22 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.4
         spacing: Style.space(4)
-        Label { text: "STAYS ARMED FOR" }
-        Field { id: expiresField; width: parent.width; placeholderText: "168h" }
+        Label { text: I18n.t("alertform.StaysArmedFor") }
+        Field { id: expiresField; width: parent.width; placeholderText: I18n.t("alertform.168h") }
       }
       Column {
         width: (parent.width - parent.spacing) * 0.6
         spacing: Style.space(4)
-        Label { text: "REASON" }
-        Field { id: reasonField; width: parent.width; placeholderText: "Shown with the alarm" }
+        Label { text: I18n.t("alertform.Reason") }
+        Field { id: reasonField; width: parent.width; placeholderText: I18n.t("alertform.ShownWithTheAlarm") }
       }
     }
 
     Toggle {
       id: standingToggle
       width: parent.width
-      label: "Fire every time"
-      description: "Off: it rings once and disarms itself"
+      label: I18n.t("alertform.FireEveryTime")
+      description: I18n.t("alertform.OffItRingsOnceAnd")
       checked: card.standing
       foreground: card.fg
       accent: card.accent
@@ -295,7 +296,7 @@ Overlay {
       onClicked: card.standing = !card.standing
       Keys.onEscapePressed: card.cancelled()
     }
-    Note { width: parent.width; text: "Nothing stays armed for ever; a watch expires when its span runs out." }
+    Note { width: parent.width; text: I18n.t("alertform.NothingStaysArmedForEver") }
 
     Row {
       spacing: Style.space(8)
@@ -313,7 +314,7 @@ Overlay {
       }
       Button {
         id: cancelButton
-        text: "Cancel   Esc"
+        text: I18n.tf("alertform.Cancel", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Hold a statement against the ledger for one account: what the bank says the
 // account held on a date, against what this ledger says, and the lines still
@@ -130,7 +131,7 @@ Overlay {
     }
     Note {
       width: parent.width
-      text: "Put in what the statement closed at. Tick the lines it shows, leave the rest pending, and settle it when the difference is nothing."
+      text: I18n.t("reconcile.PutInWhatTheStatement")
     }
 
     Row {
@@ -139,7 +140,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.45
         spacing: Style.space(4)
-        Label { text: "CLOSING DATE" }
+        Label { text: I18n.t("reconcile.ClosingDate") }
         TextField {
           id: throughField
           width: parent.width
@@ -155,7 +156,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.55
         spacing: Style.space(4)
-        Label { text: "CLOSING BALANCE" }
+        Label { text: I18n.t("reconcile.ClosingBalance") }
         TextField {
           id: balanceField
           width: parent.width
@@ -187,7 +188,7 @@ Overlay {
         Column {
           width: (parent.width - parent.spacing * 2) / 3
           spacing: Style.space(2)
-          Label { text: "SETTLED" }
+          Label { text: I18n.t("reconcile.Settled") }
           Text {
             text: card.sheet ? card.money(card.sheet.settled) : ""
             color: card.dim
@@ -198,7 +199,7 @@ Overlay {
         Column {
           width: (parent.width - parent.spacing * 2) / 3
           spacing: Style.space(2)
-          Label { text: "ON THIS STATEMENT" }
+          Label { text: I18n.t("reconcile.OnThisStatement") }
           Text {
             text: card.sheet ? card.money(card.sheet.ticked) : ""
             color: card.dim
@@ -209,7 +210,7 @@ Overlay {
         Column {
           width: (parent.width - parent.spacing * 2) / 3
           spacing: Style.space(2)
-          Label { text: "DIFFERENCE" }
+          Label { text: I18n.t("reconcile.Difference") }
           Text {
             text: card.sheet ? card.money(card.sheet.difference) : ""
             color: !card.sheet ? card.dim
@@ -300,8 +301,8 @@ Overlay {
       spacing: Style.space(8)
       Button {
         id: settleButton
-        text: "Settle   Enter"
-        tooltipText: "Every ticked line becomes reconciled and closes for good"
+        text: I18n.tf("reconcile.Settle", ["Enter"])
+        tooltipText: I18n.t("reconcile.EveryTickedLineBecomesReconciled")
         foreground: card.balanced ? card.fg : card.dimmer
         accent: card.accent
         fontFamily: card.ff
@@ -313,7 +314,7 @@ Overlay {
       }
       Button {
         id: closeButton
-        text: "Close   Esc"
+        text: I18n.tf("reconcile.Close", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff
@@ -326,7 +327,7 @@ Overlay {
     }
     Note {
       width: parent.width
-      text: "j k move   Space tick   A transfer is one line with one status, so settling it here settles it on both accounts."
+      text: I18n.t("reconcile.JKMoveSpaceTick")
     }
   }
 }

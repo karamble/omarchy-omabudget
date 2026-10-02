@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Add or edit a recurring rule. Emits argv for the CLI's bill verbs.
 Overlay {
@@ -40,14 +41,14 @@ Overlay {
     .filter(function (c) { return !c.system && !c.archived && c.kind === (card.kind === "income" ? "income" : "expense") })
     .map(function (c) { return { value: c.id, label: (c.parentName ? c.parentName + " / " : "") + c.name } })
   readonly property var everyOptions: [
-    { value: "daily", label: "Every day" },
-    { value: "weekly", label: "Every week" },
-    { value: "biweekly", label: "Every two weeks" },
-    { value: "monthly", label: "Every month" },
-    { value: "quarterly", label: "Every quarter" },
-    { value: "semiannual", label: "Twice a year" },
-    { value: "annual", label: "Every year" },
-    { value: "custom", label: "Every N days" }
+    { value: "daily", label: I18n.t("billform.EveryDay") },
+    { value: "weekly", label: I18n.t("billform.EveryWeek") },
+    { value: "biweekly", label: I18n.t("billform.EveryTwoWeeks") },
+    { value: "monthly", label: I18n.t("billform.EveryMonth") },
+    { value: "quarterly", label: I18n.t("billform.EveryQuarter") },
+    { value: "semiannual", label: I18n.t("billform.TwiceAYear") },
+    { value: "annual", label: I18n.t("billform.EveryYear") },
+    { value: "custom", label: I18n.t("billform.EveryNDays") }
   ]
 
   implicitHeight: col.implicitHeight + Style.space(32)
@@ -158,9 +159,9 @@ Overlay {
     ButtonGroup {
       id: kindGroup
       options: [
-        { value: "expense", label: "Expense" },
-        { value: "income", label: "Income" },
-        { value: "transfer", label: "Transfer" }
+        { value: "expense", label: I18n.t("billform.Expense") },
+        { value: "income", label: I18n.t("billform.Income") },
+        { value: "transfer", label: I18n.t("billform.Transfer") }
       ]
       value: card.kind
       foreground: card.fg
@@ -179,12 +180,12 @@ Overlay {
       spacing: Style.space(10)
       Cell {
         share: 0.6
-        Label { text: "NAME" }
-        Field { id: nameField; width: parent.width; placeholderText: "Rent"; KeyNavigation.tab: amountField; KeyNavigation.backtab: kindGroup }
+        Label { text: I18n.t("billform.Name") }
+        Field { id: nameField; width: parent.width; placeholderText: I18n.t("billform.Rent"); KeyNavigation.tab: amountField; KeyNavigation.backtab: kindGroup }
       }
       Cell {
         share: 0.4
-        Label { text: "AMOUNT" }
+        Label { text: I18n.t("billform.Amount") }
         Field { id: amountField; width: parent.width; placeholderText: "1200"; KeyNavigation.tab: startField; KeyNavigation.backtab: nameField }
       }
     }
@@ -201,7 +202,7 @@ Overlay {
           width: parent.width
           showLabel: false
           options: card.categoryOptions
-          placeholderText: "Type to find a category"
+          placeholderText: I18n.t("billform.TypeToFindACategory")
           triggerLabel: value === "" ? "Uncategorised" : currentLabel()
           foreground: card.fg
           accent: card.accent
@@ -241,7 +242,7 @@ Overlay {
       spacing: Style.space(10)
       Cell {
         share: 0.4
-        Label { text: "REPEATS" }
+        Label { text: I18n.t("billform.Repeats") }
         Dropdown {
           id: everyBox
           width: parent.width
@@ -257,13 +258,13 @@ Overlay {
       Cell {
         share: 0.2
         visible: card.every === "custom"
-        Label { text: "DAYS" }
+        Label { text: I18n.t("billform.Days") }
         Field { id: intervalField; width: parent.width; placeholderText: "30"; KeyNavigation.tab: startField; KeyNavigation.backtab: amountField }
       }
       Cell {
         share: card.every === "custom" ? 0.4 : 0.6
-        Label { text: "STARTS" }
-        Field { id: startField; width: parent.width; placeholderText: "YYYY-MM-DD, today if empty"; KeyNavigation.tab: endField; KeyNavigation.backtab: amountField }
+        Label { text: I18n.t("billform.Starts") }
+        Field { id: startField; width: parent.width; placeholderText: I18n.t("billform.YyyyMmDdTodayIf"); KeyNavigation.tab: endField; KeyNavigation.backtab: amountField }
       }
     }
 
@@ -272,17 +273,17 @@ Overlay {
       spacing: Style.space(10)
       Cell {
         share: 0.4
-        Label { text: "ENDS" }
-        Field { id: endField; width: parent.width; placeholderText: "YYYY-MM-DD, optional"; KeyNavigation.tab: countField; KeyNavigation.backtab: startField }
+        Label { text: I18n.t("billform.Ends") }
+        Field { id: endField; width: parent.width; placeholderText: I18n.t("billform.YyyyMmDdOptional"); KeyNavigation.tab: countField; KeyNavigation.backtab: startField }
       }
       Cell {
         share: 0.3
-        Label { text: "TIMES" }
-        Field { id: countField; width: parent.width; placeholderText: "unlimited"; KeyNavigation.tab: leadField; KeyNavigation.backtab: endField }
+        Label { text: I18n.t("billform.Times") }
+        Field { id: countField; width: parent.width; placeholderText: I18n.t("billform.Unlimited"); KeyNavigation.tab: leadField; KeyNavigation.backtab: endField }
       }
       Cell {
         share: 0.3
-        Label { text: "NOTICE, DAYS" }
+        Label { text: I18n.t("billform.NoticeDays") }
         Field { id: leadField; width: parent.width; placeholderText: "3"; KeyNavigation.tab: descField; KeyNavigation.backtab: countField }
       }
     }
@@ -292,13 +293,13 @@ Overlay {
       spacing: Style.space(10)
       Cell {
         share: 0.6
-        Label { text: "DESCRIPTION OF EACH POSTING" }
-        Field { id: descField; width: parent.width; placeholderText: "The name, if empty"; KeyNavigation.tab: tagsField; KeyNavigation.backtab: leadField }
+        Label { text: I18n.t("billform.DescriptionOfEachPosting") }
+        Field { id: descField; width: parent.width; placeholderText: I18n.t("billform.TheNameIfEmpty"); KeyNavigation.tab: tagsField; KeyNavigation.backtab: leadField }
       }
       Cell {
         share: 0.4
-        Label { text: "TAGS" }
-        Field { id: tagsField; width: parent.width; placeholderText: "fixed, home"; KeyNavigation.tab: lastToggle; KeyNavigation.backtab: descField }
+        Label { text: I18n.t("billform.Tags") }
+        Field { id: tagsField; width: parent.width; placeholderText: I18n.t("billform.FixedHome"); KeyNavigation.tab: lastToggle; KeyNavigation.backtab: descField }
       }
     }
 
@@ -308,7 +309,7 @@ Overlay {
       Toggle {
         id: lastToggle
         width: (parent.width - parent.spacing * 2) / 3
-        label: "Last day of month"
+        label: I18n.t("billform.LastDayOfMonth")
         checked: card.lastDay
         foreground: card.fg
         accent: card.accent
@@ -321,7 +322,7 @@ Overlay {
       Toggle {
         id: autoToggle
         width: (parent.width - parent.spacing * 2) / 3
-        label: "Post automatically"
+        label: I18n.t("billform.PostAutomatically")
         checked: card.auto
         foreground: card.fg
         accent: card.accent
@@ -334,7 +335,7 @@ Overlay {
       Toggle {
         id: variableToggle
         width: (parent.width - parent.spacing * 2) / 3
-        label: "Amount varies"
+        label: I18n.t("billform.AmountVaries")
         checked: card.variable
         foreground: card.fg
         accent: card.accent
@@ -350,7 +351,7 @@ Overlay {
       spacing: Style.space(8)
       Button {
         id: saveButton
-        text: "Save   Enter"
+        text: I18n.tf("billform.Save", ["Enter"])
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
@@ -364,7 +365,7 @@ Overlay {
       }
       Button {
         id: cancelButton
-        text: "Cancel   Esc"
+        text: I18n.tf("billform.Cancel", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff

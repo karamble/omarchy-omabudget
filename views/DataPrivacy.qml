@@ -3,6 +3,7 @@ import Quickshell
 import qs.Commons
 import qs.Ui
 import "../components"
+import "../i18n"
 
 // Data and privacy: where the data is, how to take it with you, and how to
 // remove it. Exports and backups are written by the daemon, inside home.
@@ -116,14 +117,14 @@ Item {
       spacing: Style.space(14)
 
       Text {
-        text: "Data & Privacy"
+        text: I18n.t("privacy.DataPrivacy")
         color: view.fg
         font.family: view.ff
         font.pixelSize: Style.font.heading
       }
       Body {
         width: parent.width
-        text: "Everything lives in one SQLite file on this machine. No cloud, no tracking, no bank connection. The daemon listens on the loopback address and opens one connection outward only when you press Fetch now in Settings or run omabudget rate fetch: to the exchange rate source chosen there, and never on its own."
+        text: I18n.t("privacy.EverythingLivesInOneSqlite")
         color: view.dim
       }
 
@@ -140,39 +141,39 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "WHERE IT WRITES"
+            title: I18n.t("privacy.WhereItWrites")
             Body { text: view.dataDir + "/ledger.db"; font.pixelSize: Style.font.bodySmall }
-            Note { width: parent.width; text: "The ledger: accounts, transactions, budgets, rules. Kept at mode 0600." }
+            Note { width: parent.width; text: I18n.t("privacy.TheLedgerAccountsTransactionsBudgets") }
             Body { text: view.dataDir + "/config.json"; font.pixelSize: Style.font.bodySmall }
-            Note { width: parent.width; text: "Settings and the API token. Never synced anywhere by the app." }
+            Note { width: parent.width; text: I18n.t("privacy.SettingsAndTheApiToken") }
             Body { text: view.dataDir + "/triggers.json"; font.pixelSize: Style.font.bodySmall }
-            Note { width: parent.width; text: "Alert triggers, if you armed any." }
-            Note { width: parent.width; topPadding: Style.space(6); text: "Keep the folder out of file sync: a database synced while open ends up corrupt. Take a backup or an export instead." }
+            Note { width: parent.width; text: I18n.t("privacy.AlertTriggersIfYouArmed") }
+            Note { width: parent.width; topPadding: Style.space(6); text: I18n.t("privacy.KeepTheFolderOutOf") }
           }
 
           TitledCard {
 
             app: view.app
             width: parent.width
-            title: "NETWORK"
+            title: I18n.t("privacy.Network")
             Body { width: parent.width; text: view.networkText() }
-            Note { width: parent.width; text: "One connection, only when you press Fetch now in Settings or run omabudget rate fetch, to the exchange rate source chosen there. The whole list of rates is read, so the request says nothing about what you hold. Nothing else leaves this machine." }
+            Note { width: parent.width; text: I18n.t("privacy.OneConnectionOnlyWhenYou") }
           }
 
           TitledCard {
 
             app: view.app
             width: parent.width
-            title: "DELETED TRANSACTIONS"
-            Note { width: parent.width; text: "A deleted transaction stays in the recycle bin for thirty days, restorable from the Transactions view with u or b, then it is gone for good." }
+            title: I18n.t("privacy.DeletedTransactions")
+            Note { width: parent.width; text: I18n.t("privacy.ADeletedTransactionStaysIn") }
           }
 
           TitledCard {
 
             app: view.app
             width: parent.width
-            title: "REMOVING EVERYTHING"
-            Note { width: parent.width; text: "In a terminal, in this order: the data first, because the second command deletes the program that knows how to do it." }
+            title: I18n.t("privacy.RemovingEverything")
+            Note { width: parent.width; text: I18n.t("privacy.InATerminalInThis") }
             Rectangle {
               width: parent.width
               height: purgeText.implicitHeight + Style.space(16)
@@ -201,13 +202,13 @@ Item {
 
             app: view.app
             width: parent.width
-            title: "EXPORT"
-            Note { width: parent.width; text: "A plain-text journal that accounting tools read, every entry balanced, or the transactions as CSV." }
+            title: I18n.t("privacy.Export")
+            Note { width: parent.width; text: I18n.t("privacy.APlainTextJournalThat") }
             ButtonGroup {
               id: formatGroup
               options: [
-                { value: "journal", label: "Journal" },
-                { value: "csv", label: "CSV" }
+                { value: "journal", label: I18n.t("privacy.Journal") },
+                { value: "csv", label: I18n.t("privacy.Csv") }
               ]
               value: view.format
               foreground: view.fg
@@ -217,39 +218,39 @@ Item {
               focusable: true
               onChanged: function (v) { view.format = v }
             }
-            Caption { text: "WRITE TO"; topPadding: Style.space(4) }
+            Caption { text: I18n.t("privacy.WriteTo"); topPadding: Style.space(4) }
             PathField {
               id: exportPath
               width: parent.width
               Keys.onReturnPressed: view.doExport()
               Keys.onEnterPressed: view.doExport()
             }
-            Go { text: "Export   e"; onClicked: view.doExport() }
+            Go { text: I18n.tf("privacy.Export2", ["e"]); onClicked: view.doExport() }
           }
 
           TitledCard {
 
             app: view.app
             width: parent.width
-            title: "BACKUP"
-            Note { width: parent.width; text: "A consistent copy of the database, taken while the daemon runs. Restore by stopping the daemon and putting the copy in place of ledger.db." }
-            Caption { text: "WRITE TO"; topPadding: Style.space(4) }
+            title: I18n.t("privacy.Backup")
+            Note { width: parent.width; text: I18n.t("privacy.AConsistentCopyOfThe") }
+            Caption { text: I18n.t("privacy.WriteTo"); topPadding: Style.space(4) }
             PathField {
               id: backupPath
               width: parent.width
               Keys.onReturnPressed: view.doBackup()
               Keys.onEnterPressed: view.doBackup()
             }
-            Go { text: "Back up   b"; onClicked: view.doBackup() }
-            Note { width: parent.width; text: "Paths stay inside your home directory; the daemon refuses anything else." }
+            Go { text: I18n.tf("privacy.BackUp", ["b"]); onClicked: view.doBackup() }
+            Note { width: parent.width; text: I18n.t("privacy.PathsStayInsideYourHome") }
           }
 
           TitledCard {
 
             app: view.app
             width: parent.width
-            title: "WHAT AN AGENT CAN SEE"
-            Note { width: parent.width; text: "Only when the agent endpoint is on, in Settings, and only with the token: the dashboard, transactions, the budget, bills and the spending report, one tool to record a transaction, and the alert watches. Nothing reaches an agent on its own, and nothing leaves this machine." }
+            title: I18n.t("privacy.WhatAnAgentCanSee")
+            Note { width: parent.width; text: I18n.t("privacy.OnlyWhenTheAgentEndpoint") }
           }
         }
       }

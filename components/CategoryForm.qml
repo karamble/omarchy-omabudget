@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../i18n"
 
 // Add or edit a category. Emits argv for the CLI's category verbs, so one
 // submit is one command and the daemon validates it.
@@ -39,17 +40,17 @@ Overlay {
   readonly property bool isChild: card.parentId !== ""
   readonly property var groups: (app ? app.categories : [])
     .filter(function (c) { return !c.parentId && !c.system && !c.archived })
-  readonly property var groupOptions: [{ value: "", label: "A group of its own" }]
+  readonly property var groupOptions: [{ value: "", label: I18n.t("catform.AGroupOfItsOwn") }]
     .concat(card.groups.map(function (c) { return { value: c.id, label: c.name + "  " + c.kind } }))
 
   // Goal is not offered until a target exists; the Budget screen sets that.
   readonly property var behaviourOptions: {
     var out = [
-      { value: "monthly", label: "Monthly" },
-      { value: "rollover", label: "Rollover" },
-      { value: "untracked", label: "Untracked" }
+      { value: "monthly", label: I18n.t("catform.Monthly") },
+      { value: "rollover", label: I18n.t("catform.Rollover") },
+      { value: "untracked", label: I18n.t("catform.Untracked") }
     ]
-    if (card.editing && card.editing.goalTarget > 0) out.push({ value: "goal", label: "Goal" })
+    if (card.editing && card.editing.goalTarget > 0) out.push({ value: "goal", label: I18n.t("catform.Goal") })
     return out
   }
 
@@ -148,7 +149,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * (card.editing ? 1 : 0.55)
         spacing: Style.space(4)
-        Label { text: "NAME" }
+        Label { text: I18n.t("catform.Name") }
         TextField {
           id: nameField
           width: parent.width
@@ -164,14 +165,14 @@ Overlay {
         Note {
           width: parent.width
           visible: !!card.editing
-          text: "The id and every transaction behind it stay as they are."
+          text: I18n.t("catform.TheIdAndEveryTransaction")
         }
       }
       Column {
         visible: !card.editing
         width: (parent.width - parent.spacing) * 0.45
         spacing: Style.space(4)
-        Label { text: "UNDER" }
+        Label { text: I18n.t("catform.Under") }
         Dropdown {
           id: parentBox
           width: parent.width
@@ -190,12 +191,12 @@ Overlay {
       width: parent.width
       spacing: Style.space(4)
       visible: !card.editing && !card.isChild
-      Label { text: "KIND" }
+      Label { text: I18n.t("catform.Kind") }
       ButtonGroup {
         id: kindGroup
         options: [
-          { value: "expense", label: "Expense" },
-          { value: "income", label: "Income" }
+          { value: "expense", label: I18n.t("catform.Expense") },
+          { value: "income", label: I18n.t("catform.Income") }
         ]
         value: card.kind
         foreground: card.fg
@@ -218,7 +219,7 @@ Overlay {
     Column {
       width: parent.width
       spacing: Style.space(6)
-      Label { text: "GLYPH" }
+      Label { text: I18n.t("catform.Glyph") }
       Row {
         width: parent.width
         spacing: Style.space(10)
@@ -230,7 +231,7 @@ Overlay {
           accent: card.accent
           font.family: card.ff
           font.pixelSize: Style.font.body
-          placeholderText: "none"
+          placeholderText: I18n.t("catform.None")
           Keys.onReturnPressed: card.submit()
           Keys.onEnterPressed: card.submit()
           Keys.onEscapePressed: card.cancelled()
@@ -238,7 +239,7 @@ Overlay {
         Note {
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - Style.space(100)
-          text: "Groups carry the glyph; a child without one borrows it."
+          text: I18n.t("catform.GroupsCarryTheGlyphA")
         }
       }
       Grid {
@@ -276,7 +277,7 @@ Overlay {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      Label { text: "POT BEHAVIOUR" }
+      Label { text: I18n.t("catform.PotBehaviour") }
       ButtonGroup {
         id: behaviourGroup
         options: card.behaviourOptions
@@ -291,7 +292,7 @@ Overlay {
       }
       Note {
         width: parent.width
-        text: "Under the envelope model: monthly starts again each period, rollover keeps what is left or short, untracked is never budgeted."
+        text: I18n.t("catform.UnderTheEnvelopeModelMonthly")
       }
     }
 
@@ -302,7 +303,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.5
         spacing: Style.space(4)
-        Label { text: "SAVE TOWARD, 0 CLEARS" }
+        Label { text: I18n.t("catform.SaveToward0Clears") }
         TextField {
           id: goalField
           width: parent.width
@@ -319,7 +320,7 @@ Overlay {
       Column {
         width: (parent.width - parent.spacing) * 0.5
         spacing: Style.space(4)
-        Label { text: "BY, YYYY-MM" }
+        Label { text: I18n.t("catform.ByYyyyMm") }
         TextField {
           id: goalDueField
           width: parent.width
@@ -337,7 +338,7 @@ Overlay {
     Note {
       width: parent.width
       visible: card.expense && !!card.editing
-      text: "A goal keeps what is left each period, and the Budget screen suggests what to put in to reach the target in time."
+      text: I18n.t("catform.AGoalKeepsWhatIs")
     }
 
     Row {
@@ -346,8 +347,8 @@ Overlay {
       Toggle {
         id: excludeToggle
         width: (parent.width - parent.spacing) * 0.5
-        label: "Keep out of statistics"
-        description: "Totals and reports skip it"
+        label: I18n.t("catform.KeepOutOfStatistics")
+        description: I18n.t("catform.TotalsAndReportsSkipIt")
         checked: card.excluded
         foreground: card.fg
         accent: card.accent
@@ -359,8 +360,8 @@ Overlay {
         id: archiveToggle
         visible: !!card.editing
         width: (parent.width - parent.spacing) * 0.5
-        label: "Archived"
-        description: "Out of the pickers, history kept"
+        label: I18n.t("catform.Archived")
+        description: I18n.t("catform.OutOfThePickersHistory")
         checked: card.archived
         foreground: card.fg
         accent: card.accent
@@ -372,14 +373,14 @@ Overlay {
     Note {
       width: parent.width
       visible: !card.editing || !card.isChild
-      text: "A group hands both of those down to the categories under it."
+      text: I18n.t("catform.AGroupHandsBothOf")
     }
 
     Row {
       spacing: Style.space(8)
       Button {
         id: saveButton
-        text: "Save   Enter"
+        text: I18n.tf("catform.Save", ["Enter"])
         foreground: card.fg
         accent: card.accent
         fontFamily: card.ff
@@ -391,7 +392,7 @@ Overlay {
       }
       Button {
         id: cancelButton
-        text: "Cancel   Esc"
+        text: I18n.tf("catform.Cancel", ["Esc"])
         foreground: card.dim
         accent: card.accent
         fontFamily: card.ff
@@ -404,8 +405,8 @@ Overlay {
       Button {
         id: removeButton
         visible: !!card.editing
-        text: "Remove"
-        tooltipText: "Only a category nothing points at can go; anything with history is archived instead"
+        text: I18n.t("catform.Remove")
+        tooltipText: I18n.t("catform.OnlyACategoryNothingPoints")
         foreground: card.app ? card.app.expense : card.dim
         accent: card.accent
         fontFamily: card.ff
