@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/karamble/omarchy-omabudget/db"
+	"github.com/karamble/omarchy-omabudget/feed"
 	"github.com/karamble/omarchy-omabudget/money"
 )
 
@@ -32,6 +33,8 @@ type FXRate struct {
 	Rate      money.Rate `json:"rate"`
 	Source    string     `json:"source"`
 	Rederived int        `json:"rederived,omitempty"`
+	// OnFile is how many dates this currency has, set only by LatestRates.
+	OnFile int `json:"onFile,omitempty"`
 }
 
 // Where a rate can come from. A feed names itself.
@@ -123,10 +126,13 @@ func (l *Ledger) Rates(ctx context.Context, currency string) ([]FXRate, error) {
 }
 
 // LatestRates is the newest rate on file for each currency, by currency,
-// which is all a form needs to preview an entry.
+// which is all a form needs to preview an entry. OnFile carries how many
+// dates that currency has, because a rate is read as of a date and the older
+// ones are still what historical figures are converted at: the list shows one
+// line per currency, and the count is what says there is history behind it.
 func (l *Ledger) LatestRates(ctx context.Context) ([]FXRate, error) {
-	rows, err := l.db.QueryContext(ctx, `SELECT f.date, f.currency, f.rate, f.source FROM fx_rates f
-		JOIN (SELECT currency, MAX(date) AS date FROM fx_rates GROUP BY currency) n
+	rows, err := l.db.QueryContext(ctx, `SELECT f.date, f.currency, f.rate, f.source, n.n FROM fx_rates f
+		JOIN (SELECT currency, MAX(date) AS date, COUNT(*) AS n FROM fx_rates GROUP BY currency) n
 		ON f.currency=n.currency AND f.date=n.date ORDER BY f.currency`)
 	if err != nil {
 		return nil, err
@@ -136,13 +142,27 @@ func (l *Ledger) LatestRates(ctx context.Context) ([]FXRate, error) {
 	for rows.Next() {
 		var r FXRate
 		var raw string
-		if err := rows.Scan(&r.Date, &r.Currency, &raw, &r.Source); err != nil {
+		if err := rows.Scan(&r.Date, &r.Currency, &raw, &r.Source, &r.OnFile); err != nil {
 			return nil, err
 		}
 		r.Rate = money.Rate(raw)
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// KnownCurrencies is every currency the shipped quote carries, with the
+// reference first. It is what the add form offers: a code here can be fetched,
+// one that is not has to be typed by hand and kept by hand.
+func (l *Ledger) KnownCurrencies() []string {
+	out := []string{l.reference}
+	for c := range feed.Builtin.Rates {
+		if c != l.reference {
+			out = append(out, c)
+		}
+	}
+	sort.Strings(out[1:])
+	return out
 }
 
 // RemoveRate drops one day's rate and re-derives every transaction in that

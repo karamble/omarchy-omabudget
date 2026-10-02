@@ -119,13 +119,48 @@ Item {
   // Rates are quoted against the reference, whatever figures are shown in.
   readonly property string base: app ? app.rateReference : ""
 
+  // The list is one line per currency. A rate is read as of a date, so the
+  // older rows are what historical figures convert at and must stay on file;
+  // rateFor opens one currency's dates rather than showing every row at once.
+  property string rateFor: ""
+  property var knownCurrencies: []
+
   function reloadRates() {
     if (!app) return
-    app.query(["rate", "list"], function (data, err) {
+    var argv = view.rateFor === "" ? ["rate", "list"] : ["rate", "list", "-currency", view.rateFor]
+    app.query(argv, function (data, err) {
       if (err) { view.app.lastError = err; return }
       view.rates = Array.isArray(data) ? data : []
+      // Removing the last date for a currency leaves nothing to show, so the
+      // view goes back by itself rather than stranding an empty list.
+      if (view.rateFor !== "" && view.rates.length === 0) { view.closeRate(); return }
       if (view.rateCursor >= view.rates.length) view.rateCursor = Math.max(0, view.rates.length - 1)
     })
+    if (view.knownCurrencies.length === 0) {
+      app.query(["rate", "known"], function (data, err) {
+        if (!err && Array.isArray(data)) view.knownCurrencies = data
+      })
+    }
+  }
+
+  // Open one currency's dates, or go back to the collapsed list.
+  function openRate(r) {
+    if (!r || view.rateFor !== "") return
+    view.rateFor = String(r.currency || "")
+    view.rateCursor = 0
+    view.reloadRates()
+  }
+  function closeRate() {
+    if (view.rateFor === "") return
+    view.rateFor = ""
+    view.rateCursor = 0
+    view.reloadRates()
+  }
+
+  // Whether a fetch can keep a code current, which is what the add form says.
+  function isFetchable(code) {
+    var c = String(code || "").toUpperCase()
+    return c !== "" && view.knownCurrencies.indexOf(c) >= 0
   }
 
   function addRate() {
@@ -298,6 +333,12 @@ Item {
         return true
       case Qt.Key_A: currencyField.forceActiveFocus(); return true
       case Qt.Key_X: view.removeRate(view.currentRate); return true
+      case Qt.Key_Return: case Qt.Key_Enter:
+        if (view.rateFor === "") view.openRate(view.currentRate)
+        return true
+      case Qt.Key_B: case Qt.Key_Escape:
+        if (view.rateFor !== "") { view.closeRate(); return true }
+        break
       }
       return false
     }
@@ -377,7 +418,9 @@ Item {
           : view.pane === "Alerts"
           ? I18n.tf("manage.armedN", [view.armed.length]) + (view.app && view.app.snap && view.app.snap.monitoring === false ? I18n.t("manage.evalOff") : "")
           : view.pane === "Rates"
-          ? I18n.tf("manage.ratesOnFile", [view.rates.length, view.base])
+          ? (view.rateFor !== ""
+              ? I18n.tf("manage.datesFor", [view.rates.length, view.rateFor])
+              : I18n.tf("manage.ratesOnFile", [view.rates.length, view.base]))
           : view.all.length + " categories" + (view.archivedCount > 0 ? ", " + view.archivedCount + " archived" : "")
         color: view.dimmer
         font.family: view.ff
@@ -607,11 +650,40 @@ Item {
         }
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: view.base !== "" ? "1 of that currency, in " + view.base : ""
+          text: view.base !== "" ? I18n.tf("manage.oneOfThat", [view.base]) : ""
           color: view.dimmer
           font.family: view.ff
           font.pixelSize: Style.font.caption
         }
+      }
+
+      // What a fetch can keep current. A code not here still works; it just
+      // stays exactly as it was typed, because neither source quotes it.
+      Text {
+        width: parent.width
+        wrapMode: Text.WordWrap
+        visible: view.knownCurrencies.length > 0
+        text: {
+          var typed = currencyField.text.trim().toUpperCase()
+          if (typed.length === 3)
+            return view.isFetchable(typed) ? I18n.tf("manage.fetchKeeps", [typed])
+                                           : I18n.tf("manage.handKept", [typed])
+          return I18n.tf("manage.fetchable", [view.knownCurrencies.join(" ")])
+        }
+        color: view.dimmer
+        font.family: view.ff
+        font.pixelSize: Style.font.caption
+      }
+
+      // Which currency's dates are open, and the way back.
+      Text {
+        width: parent.width
+        visible: view.rateFor !== ""
+        wrapMode: Text.WordWrap
+        text: I18n.tf("manage.everyDateFor", [view.rateFor])
+        color: view.dim
+        font.family: view.ff
+        font.pixelSize: Style.font.caption
       }
 
       Rectangle {
@@ -690,6 +762,15 @@ Item {
               font.pixelSize: Style.font.body
             }
             Text {
+              x: Style.space(620)
+              anchors.verticalCenter: parent.verticalCenter
+              visible: view.rateFor === "" && Number(rateRow.modelData.onFile || 1) > 1
+              text: I18n.tf("manage.onFile", [Number(rateRow.modelData.onFile || 1)])
+              color: view.dimmer
+              font.family: view.ff
+              font.pixelSize: Style.font.caption
+            }
+            Text {
               x: Style.space(500)
               anchors.verticalCenter: parent.verticalCenter
               text: rateRow.modelData.source === "manual" ? "typed" : rateRow.modelData.source === "seed" ? "shipped" : String(rateRow.modelData.source || "")
@@ -705,7 +786,11 @@ Item {
               onEntered: view.pointFrom("Rates", rateRow.index, rateRow, { x: rateRowMouse.mouseX, y: rateRowMouse.mouseY })
               onPositionChanged: function (mouse) { view.pointFrom("Rates", rateRow.index, rateRow, mouse) }
               onClicked: view.rateCursor = rateRow.index
-              onDoubleClicked: { view.rateCursor = rateRow.index; view.removeRate(rateRow.modelData) }
+              onDoubleClicked: {
+                view.rateCursor = rateRow.index
+                if (view.rateFor === "") view.openRate(rateRow.modelData)
+                else view.removeRate(rateRow.modelData)
+              }
             }
           }
         }
@@ -967,7 +1052,7 @@ Item {
         : view.pane === "Alerts"
         ? I18n.t("manage.footAlerts")
         : view.pane === "Rates"
-        ? I18n.t("manage.footRates")
+        ? (view.rateFor !== "" ? I18n.t("manage.footRatesOpen") : I18n.t("manage.footRates"))
         : I18n.t("manage.footCats")
       color: view.dimmer
       font.family: view.ff

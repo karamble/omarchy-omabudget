@@ -44,8 +44,37 @@ func runRate(args []string) error {
 		return runRateAccept(args[1:])
 	case "sources":
 		return runRateSources(args[1:])
+	case "known":
+		return runRateKnown(args[1:])
 	}
 	return runRateList(args)
+}
+
+// runRateKnown prints what the shipped quote carries, which is what a fetch
+// can keep up to date. A code not here can still be used; it has to be typed.
+func runRateKnown(args []string) error {
+	fs := flag.NewFlagSet("rate", flag.ExitOnError)
+	c := bind(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cl, err := c.dial()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := timeout()
+	defer cancel()
+	var list []string
+	if err := cl.Do(ctx, "GET", "/api/rates/known", nil, &list); err != nil {
+		return err
+	}
+	if c.json {
+		return client.PrintJSON(list)
+	}
+	for _, code := range list {
+		fmt.Println(code)
+	}
+	return nil
 }
 
 func runRateList(args []string) error {

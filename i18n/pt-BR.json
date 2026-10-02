@@ -511,14 +511,14 @@
     "manage.confirmRemoveCat": "Remover %1? Só pode sair uma categoria para a qual nada aponta.",
     "manage.armedN": "%1 armados",
     "manage.evalOff": ", a avaliação está desligada",
-    "manage.ratesOnFile": "%1 registradas, em %2",
+    "manage.ratesOnFile": "%1 moedas, em %2",
     "manage.nothingMatches": "Nada corresponde. Pressione a para adicionar uma categoria.",
     "manage.everyTime": "sempre",
     "manage.until": "até %1",
     "manage.by": "por %1",
     "manage.footPayees": "j k mover   Enter renomear, apelidar, incorporar ou remover   Tab taxas",
     "manage.footAlerts": "j k mover   a armar   Enter alterar   x desarmar   Tab categorias",
-    "manage.footRates": "j k mover   a adicionar   x remover   Tab categorias   a taxa é o que você insere, ou o que Buscar agora registrou",
+    "manage.footRates": "j k mover   Enter datas   a adicionar   x remover   Tab categorias   a taxa é o que você insere, ou o que Buscar agora registrou",
     "manage.footCats": "j k mover   Enter editar   a nova   x arquivar ou restaurar   / buscar   Tab beneficiários",
     "bills.confirmRemove": "Remover %1? O que ela já lançou permanece.",
     "bills.dueAndRules": "%1 vencem em sessenta dias   %2 regras",
@@ -616,6 +616,14 @@
     "settings.toast.sourceUrl": "as taxas são lidas de %1",
     "settings.whichTheLedger": ", na qual o livro-caixa mantém seus valores e contra a qual cota cada taxa. Nada armazenado muda quando isso muda.",
     "settings.notQuotedBy": "Não cotadas por %1, inseridas à mão: %2",
-    "dash.ofIncome": "de %1 de receitas"
+    "dash.ofIncome": "de %1 de receitas",
+    "manage.onFile": "%1 registradas",
+    "manage.oneOfThat": "1 dessa moeda, em %1",
+    "manage.fetchKeeps": "%1 é cotada pela fonte de taxas: uma busca a mantém atualizada.",
+    "manage.handKept": "%1 não é cotada por nenhuma das fontes. Permanece exatamente como digitada até você alterá-la.",
+    "manage.fetchable": "Uma busca mantém estas atualizadas: %1",
+    "manage.everyDateFor": "Todas as datas registradas para %1. As datas anteriores são as usadas na conversão dos valores daquele período.   b voltar",
+    "manage.datesFor": "%1 datas para %2",
+    "manage.footRatesOpen": "j k mover   x remover esta data   b voltar   uma data anterior é a usada na conversão dos valores daquele período"
   }
 }

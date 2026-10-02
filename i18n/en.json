@@ -510,14 +510,14 @@
     "manage.confirmRemoveCat": "Remove %1? Only a category nothing points at can go.",
     "manage.armedN": "%1 armed",
     "manage.evalOff": ", evaluation is off",
-    "manage.ratesOnFile": "%1 on file, in %2",
+    "manage.ratesOnFile": "%1 currencies, in %2",
     "manage.nothingMatches": "Nothing matches. Press a to add a category.",
     "manage.everyTime": "every time",
     "manage.until": "until %1",
     "manage.by": "by %1",
     "manage.footPayees": "j k move   Enter rename, alias, fold in or remove   Tab rates",
     "manage.footAlerts": "j k move   a arm   Enter change   x disarm   Tab categories",
-    "manage.footRates": "j k move   a add   x remove   Tab categories   a rate is what you put in, or what Fetch now in Settings filed",
+    "manage.footRates": "j k move   Enter dates   a add   x remove   Tab categories   a rate is what you put in, or what Fetch now in Settings filed",
     "manage.footCats": "j k move   Enter edit   a new   x archive or restore   / search   Tab payees",
     "bills.confirmRemove": "Remove %1? What it already posted stays.",
     "bills.dueAndRules": "%1 due in sixty days   %2 rules",
@@ -615,6 +615,14 @@
     "settings.toast.sourceUrl": "rates are read from %1",
     "settings.whichTheLedger": ", which the ledger keeps its figures in and quotes every rate against. Nothing stored moves when this changes.",
     "settings.notQuotedBy": "Not quoted by %1, entered by hand: %2",
-    "dash.ofIncome": "of %1 income"
+    "dash.ofIncome": "of %1 income",
+    "manage.onFile": "%1 on file",
+    "manage.oneOfThat": "1 of that currency, in %1",
+    "manage.fetchKeeps": "%1 is quoted by the rate source: a fetch keeps it current.",
+    "manage.handKept": "%1 is not quoted by either source. It stays exactly as typed until you change it.",
+    "manage.fetchable": "A fetch keeps these current: %1",
+    "manage.everyDateFor": "Every date on file for %1. Older dates are what figures before them convert at.   b back",
+    "manage.datesFor": "%1 dates for %2",
+    "manage.footRatesOpen": "j k move   x remove this date   b back   an older date is what figures before it convert at"
   }
 }

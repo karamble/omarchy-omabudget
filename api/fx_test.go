@@ -100,6 +100,7 @@ func TestNothingFetchesOnItsOwn(t *testing.T) {
 		"DELETE /api/rates/{currency}/{date}": {{"/api/rates/PLN/2020-01-01", nil}},
 		"POST /api/rates/accept":              {{"/api/rates/accept", map[string]string{"currency": "GBP", "rate": "1.2", "date": today(), "source": "ecb"}}},
 		"GET /api/rates/sources":              {{"/api/rates/sources", nil}},
+		"GET /api/rates/known":                {{"/api/rates/known", nil}},
 		"GET /api/reports/spending":           {{"/api/reports/spending", nil}},
 		"GET /api/reports/metrics":            {{"/api/reports/metrics", nil}},
 		"POST /api/export":                    {{"/api/export", map[string]any{"path": "/nowhere/omabudget.journal"}}},

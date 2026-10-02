@@ -24,12 +24,35 @@ func (s *Server) handleRates(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rates, err := l.Rates(r.Context(), r.URL.Query().Get("currency"))
+	// Named currency: every date on file for it, because a rate is read as of
+	// a date and the older rows are what historical figures convert at. No
+	// currency: the newest per currency, with a count of what is behind it.
+	if currency := r.URL.Query().Get("currency"); currency != "" {
+		rates, err := l.Rates(r.Context(), currency)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		writeJSON(w, s.logger, http.StatusOK, rates)
+		return
+	}
+	rates, err := l.LatestRates(r.Context())
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	writeJSON(w, s.logger, http.StatusOK, rates)
+}
+
+// handleKnownCurrencies lists what the shipped quote carries, so the add form
+// can show which codes a fetch will keep up to date without filing a row for
+// each of them.
+func (s *Server) handleKnownCurrencies(w http.ResponseWriter, r *http.Request) {
+	l, ok := s.ledgerOr(w)
+	if !ok {
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, l.KnownCurrencies())
 }
 
 type rateIn struct {

@@ -112,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/payees/{id}", s.handleUpdatePayee)
 	mux.HandleFunc("DELETE /api/payees/{id}", s.handleRemovePayee)
 	mux.HandleFunc("GET /api/rates", s.handleRates)
+	mux.HandleFunc("GET /api/rates/known", s.handleKnownCurrencies)
 	mux.HandleFunc("PUT /api/rates", s.handleSetRate)
 	mux.HandleFunc("DELETE /api/rates/{currency}/{date}", s.handleRemoveRate)
 	mux.HandleFunc("POST /api/rates/fetch", s.handleFetchRates)
