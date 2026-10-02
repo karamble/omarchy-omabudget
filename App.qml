@@ -420,6 +420,15 @@ Item {
     return (Number(n) >= 0 ? "+" : "") + root.pct(n, digits)
   }
 
+  // The short month name, from the locale rather than a table of English.
+  // standaloneMonthName is zero based, and some locales abbreviate with a
+  // trailing stop ("out."), which the captions here do not want.
+  function monthShort(m) {
+    var n = Number(m)
+    if (!(n >= 1 && n <= 12)) return String(m)
+    return String(I18n.locale.standaloneMonthName(n - 1, Locale.ShortFormat)).replace(/\.$/, "")
+  }
+
   // ---- navigation
   // The id is what the rest of the app compares and what names the view file;
   // only the label is shown, so only the label is translated.

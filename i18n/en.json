@@ -614,6 +614,7 @@
     "settings.toast.sourcePublic": "rates are read from the public instance",
     "settings.toast.sourceUrl": "rates are read from %1",
     "settings.whichTheLedger": ", which the ledger keeps its figures in and quotes every rate against. Nothing stored moves when this changes.",
-    "settings.notQuotedBy": "Not quoted by %1, entered by hand: %2"
+    "settings.notQuotedBy": "Not quoted by %1, entered by hand: %2",
+    "dash.ofIncome": "of %1 income"
   }
 }

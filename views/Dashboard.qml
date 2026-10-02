@@ -88,7 +88,16 @@ Item {
   property var now: new Date()
   Timer { interval: 60000; running: true; repeat: true; onTriggered: view.now = new Date() }
 
-  readonly property var monthNames: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  // Chart axis labels, from the locale. Rebuilt when the language changes
+  // because it reads app.monthShort, which reads the locale.
+  readonly property var monthNames: {
+    var out = []
+    for (var m = 1; m <= 12; m++) {
+      var n = view.app ? view.app.monthShort(m) : String(m)
+      out.push(n.charAt(0).toUpperCase() + n.slice(1))
+    }
+    return out
+  }
 
   function money(minor, currency) { return app ? app.fmt(minor, currency) : String(minor) }
   // A gain carries its plus sign; hidden amounts carry nothing.
@@ -465,7 +474,7 @@ Item {
                 ? I18n.tf("budget.toBeBudgeted", [view.money(view.toBeBudgeted, view.cur)])
                 : view.planned > 0
                   ? I18n.tf("dash.pctOfBudget", [view.spendPct, view.money(view.planned, view.cur)])
-                  : "of " + view.money(view.earned, view.cur) + " income"
+                  : I18n.tf("dash.ofIncome", [view.money(view.earned, view.cur)])
               color: view.envelope && view.toBeBudgeted < 0 ? view.expense : view.dimmer
             }
           }

@@ -615,6 +615,7 @@
     "settings.toast.sourcePublic": "as taxas são lidas da instância pública",
     "settings.toast.sourceUrl": "as taxas são lidas de %1",
     "settings.whichTheLedger": ", na qual o livro-caixa mantém seus valores e contra a qual cota cada taxa. Nada armazenado muda quando isso muda.",
-    "settings.notQuotedBy": "Não cotadas por %1, inseridas à mão: %2"
+    "settings.notQuotedBy": "Não cotadas por %1, inseridas à mão: %2",
+    "dash.ofIncome": "de %1 de receitas"
   }
 }

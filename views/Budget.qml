@@ -40,9 +40,9 @@ Item {
   function monthLabel(k) {
     var parts = String(k || "").split("-")
     if (parts.length !== 2) return k
-    var names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
     var m = Number(parts[1])
-    return (names[m - 1] || parts[1]) + " " + parts[0]
+    var name = view.app ? view.app.monthShort(m) : parts[1]
+    return String(name).toUpperCase() + " " + parts[0]
   }
   function shiftKey(k, n) {
     var parts = String(k).split("-")
