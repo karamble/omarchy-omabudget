@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "i18n"
 
 // The application. The shell loads this Item when the panel is opened and
 // calls open() and close() on it; the window itself is ours.
@@ -287,7 +288,7 @@ Item {
         var raw = String(text || "").trim()
         if (raw === "") return
         try { root.snap = JSON.parse(raw); root.lastError = "" }
-        catch (e) { root.lastError = "could not read the dashboard" }
+        catch (e) { root.lastError = I18n.t("app.err.dashboard") }
       }
     }
     stderr: StdioCollector {
@@ -361,7 +362,7 @@ Item {
       if (mutateProc.running) {
         mutateProc.running = false
         root.mutateQueue = []
-        root.lastError = "the helper did not answer"
+        root.lastError = I18n.t("app.err.noAnswer")
       }
     }
   }
@@ -394,8 +395,12 @@ Item {
     while (s.length <= d) s = "0" + s
     var whole = d > 0 ? s.slice(0, s.length - d) : s
     var frac = d > 0 ? s.slice(s.length - d) : ""
-    whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-    return (neg ? "-" : "") + whole + (d > 0 ? "." + frac : "")
+    // The separators come from the locale, the arithmetic does not. Money is
+    // sliced out of integer minor units on purpose, so this must not become
+    // toLocaleString(), which takes a double and would round.
+    var loc = I18n.locale
+    whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, loc.groupSeparator)
+    return (neg ? "-" : "") + whole + (d > 0 ? loc.decimalPoint + frac : "")
   }
 
   // ---- navigation
@@ -619,8 +624,8 @@ Item {
 
             Button {
               width: parent.width
-              text: "Quick add   n"
-              tooltipText: "Log an expense in a few keystrokes"
+              text: I18n.tf("app.quickAdd", ["n"])
+              tooltipText: I18n.t("app.quickAdd.tip")
               foreground: root.foreground
               accent: root.accent
               fontFamily: root.fontFamily
@@ -631,7 +636,7 @@ Item {
             }
             Text {
               topPadding: Style.space(8)
-              text: "Local. Private. Yours."
+              text: I18n.t("app.tagline")
               color: root.dimmer
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -678,8 +683,8 @@ Item {
             }
             Button {
               visible: !root.built && root.buildable
-              text: "Build now"
-              tooltipText: "Runs make in the plugin directory, in a terminal"
+              text: I18n.t("app.build")
+              tooltipText: I18n.t("app.build.tip")
               foreground: root.foreground
               accent: root.accent
               fontFamily: root.fontFamily
@@ -730,7 +735,7 @@ Item {
                 width: parent.width - Style.space(110) - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter
                 wrapMode: Text.WordWrap
-                text: "The helper is older than the source. Rebuild it, or the daemon keeps running the previous version."
+                text: I18n.t("app.stale")
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
@@ -738,8 +743,8 @@ Item {
               Button {
                 width: Style.space(110)
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Rebuild"
-                tooltipText: "Runs make in the plugin directory, then restarts the shell"
+                text: I18n.t("app.rebuild")
+                tooltipText: I18n.t("app.rebuild.tip")
                 foreground: root.foreground
                 accent: root.accent
                 fontFamily: root.fontFamily
@@ -882,7 +887,7 @@ Item {
 
   function build(then) {
     if (!root.buildable) {
-      root.lastError = "no Makefile in " + root.pluginDir
+      root.lastError = I18n.tf("app.err.noMakefile", [root.pluginDir])
                      + ": reinstall with omarchy plugin add"
       return
     }

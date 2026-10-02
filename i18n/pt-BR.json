@@ -1,0 +1,24 @@
+{
+  "locale": "pt_BR",
+  "name": "Português (Brasil)",
+  "credit": "Portuguese (pt-BR) wording contributed by @brunoshiguemoto",
+  "strings": {
+    "app.tagline": "Local. Privado. Seu.",
+
+    "app.quickAdd": "Adicionar rápido   %1",
+    "app.quickAdd.tip": "Registre uma despesa em poucas teclas",
+
+    "app.build": "Compilar agora",
+    "app.build.tip": "Executa make no diretório do plugin, em um terminal",
+    "app.rebuild": "Recompilar",
+    "app.rebuild.tip": "Executa make no diretório do plugin e reinicia o shell",
+    "app.stale": "O auxiliar é mais antigo que o código. Recompile, ou o daemon continuará executando a versão anterior.",
+
+    "app.err.dashboard": "não foi possível ler o painel",
+    "app.err.noAnswer": "o auxiliar não respondeu",
+    "app.err.noMakefile": "nenhum Makefile em %1",
+
+    "settings.language": "IDIOMA DA INTERFACE",
+    "settings.language.note": "Os valores acompanham o idioma: separadores e datas são escritos como aquele idioma os escreve."
+  }
+}
