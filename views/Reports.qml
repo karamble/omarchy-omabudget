@@ -423,7 +423,13 @@ Item {
             Component.onCompleted: flowChart.progress = 1
             width: parent.width
             height: Style.space(200)
-            labels: view.months.map(function (m) { return m.label })
+            // Same as the dashboard: the daemon's label is English, the key
+            // beside it is not, so the label is derived from the key.
+            labels: view.months.map(function (m) {
+              var n = parseInt(String(m.key || "").slice(5, 7), 10)
+              var s = view.app && n >= 1 && n <= 12 ? view.app.monthShort(n) : String(m.label || "")
+              return s.charAt(0).toUpperCase() + s.slice(1)
+            })
             series: [
               { label: I18n.t("reports.Income"), color: view.app ? view.app.income : view.accent, values: view.months.map(function (m) { return m.income }) },
               { label: I18n.t("reports.Expenses"), color: view.app ? view.app.expense : view.fg, values: view.months.map(function (m) { return m.expense }) },

@@ -48,7 +48,18 @@ Item {
     ? savingsRate - (Number(previous.savingsRate) || 0) : 0
 
   readonly property var cashPoints: view.pluck(cash ? cash.series : null, "liquid")
-  readonly property var monthLabels: view.pluck(months, "label")
+  // The daemon sends a three-letter English label, but the key beside it is
+  // the month itself, so the label is derived here and follows the locale.
+  readonly property var monthLabels: {
+    var out = []
+    var ms = view.months || []
+    for (var i = 0; i < ms.length; i++) {
+      var m = parseInt(String(ms[i].key || "").slice(5, 7), 10)
+      var n = view.app && m >= 1 && m <= 12 ? view.app.monthShort(m) : String(ms[i].label || "")
+      out.push(n.charAt(0).toUpperCase() + n.slice(1))
+    }
+    return out
+  }
   readonly property var monthIncome: view.pluck(months, "income")
   readonly property var monthExpense: view.pluck(months, "expense")
   readonly property var monthNet: view.pluck(months, "net")
