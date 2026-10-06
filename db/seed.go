@@ -110,6 +110,36 @@ func slug(s string) string {
 	return strings.TrimSuffix(b.String(), "-")
 }
 
+// SeededCategory is one row the seed plants: the id it is keyed on, the English
+// name that id was derived from, its parent and whether it is a system row.
+type SeededCategory struct {
+	ID     string
+	Name   string
+	Parent string
+	System bool
+}
+
+// SeededCategories lists every category the seed plants, in seeding order.
+//
+// It walks the same vars seedCategories walks, so the two cannot disagree: a
+// category added to the taxonomy appears here without a second edit. The
+// translation pass and the guards read it, which is what keeps the language
+// files and the seed from drifting apart.
+func SeededCategories() []SeededCategory {
+	out := make([]SeededCategory, 0, len(systemCategories)+len(seedGroups))
+	for _, s := range systemCategories {
+		out = append(out, SeededCategory{ID: s.id, Name: s.name, System: true})
+	}
+	for _, g := range seedGroups {
+		gid := slug(g.name)
+		out = append(out, SeededCategory{ID: gid, Name: g.name})
+		for _, c := range g.children {
+			out = append(out, SeededCategory{ID: gid + "/" + slug(c.name), Name: c.name, Parent: gid})
+		}
+	}
+	return out
+}
+
 // seedCategories loads the default taxonomy. INSERT OR IGNORE, keyed on the
 // slug id, so running it again adds nothing and changes nothing.
 func seedCategories(ctx context.Context, tx *sql.Tx, _ Options) error {

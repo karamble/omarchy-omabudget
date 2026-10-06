@@ -94,6 +94,13 @@ install: build
 		$(INSTALL) -d "$(PLUGIN_DIR)/$$d"; \
 		ls $$d/*.qml >/dev/null 2>&1 && $(INSTALL) -m 0644 $$d/*.qml "$(PLUGIN_DIR)/$$d/"; \
 	done
+	@# i18n is not in PLUGIN_DIRS because the loop above copies only *.qml, and
+	@# most of this directory is the language data itself. Without it every
+	@# label renders as its own key, which is what the fallback does with no
+	@# file to read. catalogue.go is deliberately left out: it is compiled into
+	@# the binaries rather than read at runtime.
+	@$(INSTALL) -d "$(PLUGIN_DIR)/i18n"
+	@$(INSTALL) -m 0644 i18n/*.json i18n/I18n.qml i18n/qmldir "$(PLUGIN_DIR)/i18n/"
 	@$(INSTALL) -m 0644 $(PLUGIN_FILES) $(PREVIEW) "$(PLUGIN_DIR)/"
 	@# install writes through a fresh inode, so a running daemon holding the old
 	@# binary open does not block the replacement, which plain cp would.

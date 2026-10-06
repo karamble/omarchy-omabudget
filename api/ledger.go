@@ -545,24 +545,24 @@ type dashboardOut struct {
 	// BaseCurrency is what every figure below is shown in, converted from
 	// the ledger's RateReference at today's rate; a ratio is the same in
 	// either. Decimals is the minor-unit digits of every currency in play.
-	BaseCurrency  string            `json:"baseCurrency"`
-	RateReference string            `json:"rateReference"`
+	BaseCurrency  string `json:"baseCurrency"`
+	RateReference string `json:"rateReference"`
 	// Language rides along so the app can set its interface language from
 	// the document it already refreshes, rather than asking separately.
-	Language string `json:"language,omitempty"`
-	Decimals      map[string]int    `json:"decimals"`
-	Period        period            `json:"period"`
-	Totals        domain.Totals     `json:"totals"`
-	Previous      domain.Totals     `json:"previous"`
-	Liquid        int64             `json:"liquid"`
-	NetWorth      int64             `json:"netWorth"`
-	Accounts      []accountRow      `json:"accounts"`
-	Recent        []recentRow       `json:"recent"`
-	Cash          domain.CashSeries `json:"cash"`
-	Budget        domain.Budget     `json:"budget"`
-	Months        []monthOut        `json:"months"`
-	Bills         []billRow         `json:"bills"`
-	Model         string            `json:"model"`
+	Language string            `json:"language,omitempty"`
+	Decimals map[string]int    `json:"decimals"`
+	Period   period            `json:"period"`
+	Totals   domain.Totals     `json:"totals"`
+	Previous domain.Totals     `json:"previous"`
+	Liquid   int64             `json:"liquid"`
+	NetWorth int64             `json:"netWorth"`
+	Accounts []accountRow      `json:"accounts"`
+	Recent   []recentRow       `json:"recent"`
+	Cash     domain.CashSeries `json:"cash"`
+	Budget   domain.Budget     `json:"budget"`
+	Months   []monthOut        `json:"months"`
+	Bills    []billRow         `json:"bills"`
+	Model    string            `json:"model"`
 	// Unconverted names the currencies liquid funds and net worth had to
 	// leave out, because no rate is on file for them.
 	Unconverted []string        `json:"unconverted,omitempty"`

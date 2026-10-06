@@ -110,7 +110,7 @@ Item {
     if (cat.system) { view.app.lastError = I18n.tf("manage.err.system", [cat.name]); return }
     var back = cat.archived === true
     app.run(["category", back ? "restore" : "archive", String(cat.id)],
-            (back ? "restored " : "archived ") + cat.name)
+            I18n.tf(back ? "manage.toast.restoredCat" : "manage.toast.archivedCat", [cat.name]))
   }
   // ---- rates, spec 8: typed here, or filed by a fetch pressed in Settings
   property var rates: []

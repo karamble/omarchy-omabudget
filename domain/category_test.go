@@ -322,3 +322,161 @@ func TestRemoveCategory(t *testing.T) {
 		t.Fatalf("archiving lost the history: %d rows", len(list))
 	}
 }
+
+// TestTranslateCategories walks a translation pass: a dry run writes nothing, a
+// seeded row moves, a row the user renamed is left alone, running it twice has
+// nothing left to do, and the way back to English is the same operation.
+func TestTranslateCategories(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+
+	// A stand-in for the language files: the names each id is known by, and
+	// what this language calls it.
+	known := map[string][]string{
+		"housing":           {"Housing", "Wohnen"},
+		"personal/hobbies":  {"Hobbies", "hobbies"},
+		"housing/rent":      {"Rent", "Miete"},
+		"food/groceries":    {"Groceries", "Lebensmittel"},
+		"sys-uncategorised": {"Uncategorised", "Nicht kategorisiert"},
+	}
+	de := map[string]string{
+		"housing": "Wohnen", "housing/rent": "Miete",
+		"food/groceries": "Lebensmittel", "sys-uncategorised": "Nicht kategorisiert",
+		// Differs from the seeded name only in case, which still has to move:
+		// a word a language capitalises differently is a different word on
+		// screen.
+		"personal/hobbies": "hobbies",
+	}
+	en := map[string]string{
+		"housing": "Housing", "housing/rent": "Rent",
+		"food/groceries": "Groceries", "sys-uncategorised": "Uncategorised",
+		"personal/hobbies": "Hobbies",
+	}
+
+	nameOf := func(id string) string {
+		t.Helper()
+		c, err := l.CategoryAny(ctx, id)
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		return c.Name
+	}
+
+	// The user renames one of them first. It is theirs from here on.
+	groceries, err := l.CategoryAny(ctx, "food/groceries")
+	if err != nil {
+		t.Fatal(err)
+	}
+	groceries.Name = "Food shopping"
+	if _, err := l.UpdateCategory(ctx, groceries); err != nil {
+		t.Fatal(err)
+	}
+
+	// A dry run reports and writes nothing.
+	out, err := l.TranslateCategories(ctx, "de", de, known, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.DryRun || len(out.Renamed) != 4 || len(out.Kept) != 1 || len(out.Missing) != 0 {
+		t.Fatalf("%+v", out)
+	}
+	if out.Kept[0].ID != "food/groceries" || out.Kept[0].Name != "Food shopping" {
+		t.Fatalf("kept %+v", out.Kept)
+	}
+	if got := nameOf("housing/rent"); got != "Rent" {
+		t.Fatalf("a dry run wrote %q", got)
+	}
+
+	// The pass itself, system row included.
+	out, err = l.TranslateCategories(ctx, "de", de, known, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Renamed) != 4 {
+		t.Fatalf("%+v", out.Renamed)
+	}
+	for id, want := range map[string]string{
+		"housing": "Wohnen", "housing/rent": "Miete", "personal/hobbies": "hobbies",
+		"sys-uncategorised": "Nicht kategorisiert", "food/groceries": "Food shopping",
+	} {
+		if got := nameOf(id); got != want {
+			t.Errorf("%s is %q, want %q", id, got, want)
+		}
+	}
+
+	// Transactions are booked on ids, so the tree moved and history did not.
+	if _, err := l.CategoryAny(ctx, "housing/rent"); err != nil {
+		t.Fatalf("the id moved: %v", err)
+	}
+
+	// Run again and there is nothing left to do, but the user's own name is
+	// still reported as kept rather than quietly forgotten.
+	out, err = l.TranslateCategories(ctx, "de", de, known, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Renamed) != 0 || len(out.Kept) != 1 {
+		t.Fatalf("a second pass did %+v", out)
+	}
+
+	// Back to English, by the same comparison.
+	out, err = l.TranslateCategories(ctx, "en", en, known, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Renamed) != 4 {
+		t.Fatalf("%+v", out.Renamed)
+	}
+	if got := nameOf("personal/hobbies"); got != "Hobbies" {
+		t.Fatalf("a case-only difference did not come back: %q", got)
+	}
+	if got := nameOf("housing/rent"); got != "Rent" {
+		t.Fatalf("back in English it is %q", got)
+	}
+	if got := nameOf("food/groceries"); got != "Food shopping" {
+		t.Fatalf("the user's name did not survive the round trip: %q", got)
+	}
+}
+
+// TestTranslateCategoriesRefusesCollision holds the invariant UpdateCategory
+// enforces and the bulk write bypasses: two categories under one parent must
+// not share a name. A language that would cause one is refused whole.
+func TestTranslateCategoriesRefusesCollision(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+
+	known := map[string][]string{"housing/rent": {"Rent"}}
+	clash := map[string]string{"housing/rent": "Renovation"}
+
+	if _, err := l.TranslateCategories(ctx, "xx", clash, known, false); err == nil {
+		t.Fatal("a colliding name was accepted")
+	} else if !strings.Contains(err.Error(), "housing/renovation") {
+		t.Fatalf("the error does not name the other category: %v", err)
+	}
+	c, err := l.CategoryAny(ctx, "housing/rent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "Rent" {
+		t.Fatalf("the refused pass still wrote %q", c.Name)
+	}
+}
+
+// TestTranslateCategoriesReportsMissing checks that a category the user deleted
+// is reported rather than planted again.
+func TestTranslateCategoriesReportsMissing(t *testing.T) {
+	l := newLedger(t)
+	ctx := context.Background()
+
+	target := map[string]string{"housing/moat": "Burggraben"}
+	out, err := l.TranslateCategories(ctx, "de", target, map[string][]string{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Missing) != 1 || out.Missing[0] != "housing/moat" {
+		t.Fatalf("%+v", out)
+	}
+	if _, err := l.CategoryAny(ctx, "housing/moat"); err == nil {
+		t.Fatal("a missing category was planted")
+	}
+}

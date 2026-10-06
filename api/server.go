@@ -107,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/categories", s.handleAddCategory)
 	mux.HandleFunc("PUT /api/categories/{id...}", s.handleUpdateCategory)
 	mux.HandleFunc("DELETE /api/categories/{id...}", s.handleRemoveCategory)
+	mux.HandleFunc("POST /api/categories/translate", s.handleTranslateCategories)
 	mux.HandleFunc("GET /api/settings", s.handleSettings)
 	mux.HandleFunc("GET /api/payees", s.handlePayees)
 	mux.HandleFunc("PUT /api/payees/{id}", s.handleUpdatePayee)

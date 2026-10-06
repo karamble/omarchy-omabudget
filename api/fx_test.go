@@ -90,6 +90,7 @@ func TestNothingFetchesOnItsOwn(t *testing.T) {
 		"POST /api/categories":                {{"/api/categories", map[string]any{"name": "Plants"}}},
 		"PUT /api/categories/{id...}":         {{"/api/categories/nope", map[string]any{"name": "Nope"}}},
 		"DELETE /api/categories/{id...}":      {{"/api/categories/nope", nil}},
+		"POST /api/categories/translate":      {{"/api/categories/translate", map[string]any{"language": "en", "dryRun": true}}, {"/api/categories/translate", map[string]any{"language": "en"}}},
 		"GET /api/settings":                   {{"/api/settings", nil}},
 		"PUT /api/settings":                   {{"/api/settings", map[string]any{"baseCurrency": "USD"}}, {"/api/settings", map[string]any{"rateSource": "frankfurter", "rateSourceUrl": "http://127.0.0.1:9/v1/latest"}}, {"/api/settings", map[string]any{"rateSource": "ecb"}}},
 		"GET /api/payees":                     {{"/api/payees", nil}},
