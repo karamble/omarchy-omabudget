@@ -127,3 +127,58 @@ func TestCategoryAPI(t *testing.T) {
 		t.Fatalf("unknown: %d", code)
 	}
 }
+
+// TestTranslateCategoriesAPI covers the wiring rather than the rules, which
+// the domain tests hold: that the route is reachable, that the names come out
+// of the embedded language files, and that a bad tag is refused before any of
+// it runs.
+func TestTranslateCategoriesAPI(t *testing.T) {
+	s, l := newTestServer(t, 1)
+	ctx := t.Context()
+
+	// A tag that could name a file outside the directory never reaches one.
+	code, body := call(t, s, "POST", "/api/categories/translate", map[string]any{"language": "../../etc/passwd"})
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("a path as a language: %d %s", code, body)
+	}
+	code, body = call(t, s, "POST", "/api/categories/translate", map[string]any{"language": "xx"})
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("an unshipped language: %d %s", code, body)
+	}
+
+	// English against a freshly seeded ledger has nothing to do, which is the
+	// quietest proof that the embedded names and the seed agree.
+	code, body = call(t, s, "POST", "/api/categories/translate", map[string]any{"language": "en", "dryRun": true})
+	if code != http.StatusOK {
+		t.Fatalf("en dry run: %d %s", code, body)
+	}
+	var out domain.Translation
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !out.DryRun || out.Language != "en" {
+		t.Fatalf("%+v", out)
+	}
+	if len(out.Renamed) != 0 || len(out.Kept) != 0 || len(out.Missing) != 0 {
+		t.Fatalf("a fresh English ledger is not already English: %+v", out)
+	}
+
+	// Rename one by hand and English then reports it as the user's own.
+	rent, err := l.CategoryAny(ctx, "housing/rent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rent.Name = "Flat"
+	if _, err := l.UpdateCategory(ctx, rent); err != nil {
+		t.Fatal(err)
+	}
+	code, body = call(t, s, "POST", "/api/categories/translate", map[string]any{"language": "en"})
+	if code != http.StatusOK {
+		t.Fatalf("en: %d %s", code, body)
+	}
+	out = domain.Translation{}
+	json.Unmarshal(body, &out)
+	if len(out.Kept) != 1 || out.Kept[0].ID != "housing/rent" || out.Kept[0].Name != "Flat" {
+		t.Fatalf("%+v", out.Kept)
+	}
+}

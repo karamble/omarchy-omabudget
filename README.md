@@ -138,6 +138,20 @@ The keys are the same in every view where they make sense:
 | `t` | jump from a report line to its transactions |
 | `Esc` | close a form, clear a filter, close the window |
 
+### Languages
+
+The interface ships in English, German, Spanish, Japanese, Portuguese (Brazil),
+Russian and Simplified Chinese, picked in Settings. Figures follow the
+language, so separators, dates and month names are written the way that
+language writes them.
+
+Category names are the exception, because they are rows in your ledger rather
+than labels on the screen: they are seeded in English and stay as they are
+until you ask for them to be translated, under INTERFACE in Settings, or with
+`omabudget category translate`. Categories you renamed yourself are never
+touched. Adding a language is a matter of adding one file, which
+[docs/TRANSLATING.md](docs/TRANSLATING.md) describes.
+
 ## The command line
 
 Everything the app does, the daemon does for `omabudget` too, which lives in

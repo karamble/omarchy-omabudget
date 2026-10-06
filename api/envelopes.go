@@ -11,6 +11,7 @@ import (
 	"github.com/karamble/omarchy-omabudget/config"
 	"github.com/karamble/omarchy-omabudget/domain"
 	"github.com/karamble/omarchy-omabudget/feed"
+	"github.com/karamble/omarchy-omabudget/i18n"
 	"github.com/karamble/omarchy-omabudget/money"
 )
 
@@ -216,6 +217,53 @@ func (s *Server) handleRemoveCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, s.logger, http.StatusOK, map[string]string{"removed": id})
+}
+
+// categoryTranslate asks for the seeded categories to be renamed into one
+// language. An empty language means whatever the interface is set to.
+type categoryTranslate struct {
+	Language string `json:"language"`
+	DryRun   bool   `json:"dryRun"`
+}
+
+// handleTranslateCategories renames the categories the seed plants into
+// another language.
+//
+// Category names are rows rather than labels, so the only way to translate
+// them is to rename them. The names come from the language files this binary
+// embeds, which are the files the interface reads, so a translation stays data
+// and adding one is still a matter of adding a file.
+func (s *Server) handleTranslateCategories(w http.ResponseWriter, r *http.Request) {
+	l, ok := s.ledgerOr(w)
+	if !ok {
+		return
+	}
+	var in categoryTranslate
+	if !s.decode(w, r, &in) {
+		return
+	}
+	tag := strings.TrimSpace(in.Language)
+	if tag == "" {
+		tag = strings.TrimSpace(s.Config().Language)
+	}
+	if tag == "" {
+		tag = "en"
+	}
+	if !languageTag.MatchString(tag) {
+		s.fail(w, fmt.Errorf("%q is not a language tag", tag))
+		return
+	}
+	target, err := i18n.SeedNames(tag)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	out, err := l.TranslateCategories(r.Context(), tag, target, i18n.AllSeedNames(), in.DryRun)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, s.logger, http.StatusOK, out)
 }
 
 // languageTag is the shape a language tag may take. The app turns this into a

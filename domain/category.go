@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/karamble/omarchy-omabudget/db"
@@ -326,4 +327,170 @@ func pathOfCategory(c Category) string {
 		return c.ParentName + " / " + c.Name
 	}
 	return c.Name
+}
+
+// Translation reports what a translation pass did, or what a dry run would do.
+type Translation struct {
+	Language string    `json:"language"`
+	DryRun   bool      `json:"dryRun"`
+	Renamed  []Renamed `json:"renamed"`
+	Kept     []Kept    `json:"kept"`
+	Missing  []string  `json:"missing"`
+}
+
+// Renamed is one category this pass moved to another language.
+type Renamed struct {
+	ID   string `json:"id"`
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// Kept is a seeded category carrying a name the user gave it, which a
+// translation pass leaves exactly as it found it.
+type Kept struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// namedIn reports whether name is one of the names list carries, compared the
+// way the rest of this file compares category names.
+func namedIn(list []string, name string) bool {
+	name = strings.TrimSpace(name)
+	for _, s := range list {
+		if strings.EqualFold(strings.TrimSpace(s), name) {
+			return true
+		}
+	}
+	return false
+}
+
+// TranslateCategories renames the seeded categories into another language.
+//
+// target is the name each seeded id takes, keyed by id, and known is every name
+// an id carries in any shipped language. A row is renamed only while it still
+// carries one of its known names: a category the user renamed is theirs and is
+// reported as kept, a pass run twice changes nothing the second time, and the
+// way back to English is the same comparison rather than a special case.
+//
+// A seeded id with no row is reported as missing rather than planted again,
+// because a category the user deleted should stay deleted.
+//
+// This writes the system rows too, which UpdateCategory refuses. That refusal
+// is there to stop a user editing rows the ledger books against; the names are
+// labels like any other, and leaving them out is how a tree ends up half
+// translated.
+func (l *Ledger) TranslateCategories(ctx context.Context, language string,
+	target map[string]string, known map[string][]string, dry bool) (Translation, error) {
+
+	out := Translation{
+		Language: language,
+		DryRun:   dry,
+		Renamed:  []Renamed{},
+		Kept:     []Kept{},
+		Missing:  []string{},
+	}
+
+	// Read every live row and drain the cursor before anything else runs. The
+	// pool is pinned to one connection, so a statement issued while these rows
+	// are open waits for a connection that this loop is holding.
+	type row struct{ name, parent string }
+	rows, err := l.db.QueryContext(ctx,
+		`SELECT id,name,COALESCE(parent_id,'') FROM categories WHERE deleted_at IS NULL`)
+	if err != nil {
+		return Translation{}, err
+	}
+	current := map[string]row{}
+	for rows.Next() {
+		var id string
+		var r row
+		if err := rows.Scan(&id, &r.name, &r.parent); err != nil {
+			rows.Close()
+			return Translation{}, err
+		}
+		current[id] = r
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Translation{}, err
+	}
+
+	ids := make([]string, 0, len(target))
+	for id := range target {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		want := strings.TrimSpace(target[id])
+		if want == "" {
+			return Translation{}, fmt.Errorf("%s: this language gives it no name", id)
+		}
+		cur, ok := current[id]
+		switch {
+		case !ok:
+			out.Missing = append(out.Missing, id)
+		case !namedIn(known[id], cur.name):
+			out.Kept = append(out.Kept, Kept{ID: id, Name: cur.name})
+		case strings.TrimSpace(cur.name) == want:
+			// Already in this language. Neither renamed nor kept back, so a
+			// second pass reports nothing to do.
+			//
+			// Compared exactly, unlike the match above. A name differing only
+			// in case is a different name on screen, and German capitalises
+			// nouns the English spelling of the same word leaves lowercase.
+		default:
+			out.Renamed = append(out.Renamed, Renamed{ID: id, From: cur.name, To: want})
+		}
+	}
+
+	// The writes below go straight to SQL and so miss the sibling-name check
+	// UpdateCategory makes. Two categories under one parent sharing a name is
+	// what the rest of the app reads as ambiguous, so settle the whole result
+	// first and refuse all of it rather than commit half. User categories are
+	// in this check too: a translated name can collide with one of theirs.
+	final := make(map[string]string, len(current))
+	for id, r := range current {
+		final[id] = r.name
+	}
+	for _, r := range out.Renamed {
+		final[r.ID] = r.To
+	}
+	allIDs := make([]string, 0, len(final))
+	for id := range final {
+		allIDs = append(allIDs, id)
+	}
+	sort.Strings(allIDs)
+	seen := map[string]string{}
+	for _, id := range allIDs {
+		key := current[id].parent + "\x00" + strings.ToLower(strings.TrimSpace(final[id]))
+		if other, dup := seen[key]; dup {
+			return Translation{}, fmt.Errorf("%s in %s would be named %q, which %s already carries under the same parent",
+				id, language, final[id], other)
+		}
+		seen[key] = id
+	}
+
+	if dry || len(out.Renamed) == 0 {
+		return out, nil
+	}
+
+	tx, err := l.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Translation{}, err
+	}
+	defer tx.Rollback()
+	upd, err := tx.PrepareContext(ctx, `UPDATE categories SET name=? WHERE id=?`)
+	if err != nil {
+		return Translation{}, err
+	}
+	defer upd.Close()
+	for _, r := range out.Renamed {
+		if _, err := upd.ExecContext(ctx, r.To, r.ID); err != nil {
+			return Translation{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Translation{}, err
+	}
+	return out, nil
 }

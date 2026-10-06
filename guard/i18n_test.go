@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/karamble/omarchy-omabudget/db"
 )
 
 // The language files are data, not code, so nothing compiles them and nothing
@@ -44,7 +46,61 @@ func readLang(t *testing.T, tag string) langFile {
 // languages are the files that must exist. English is the source of truth.
 var languages = []string{"en", "de", "es", "ja", "pt-BR", "ru", "zh-CN"}
 
-var keyCall = regexp.MustCompile(`I18n\.tf?\(\s*"([^"]+)"`)
+var keyCall = regexp.MustCompile(`I18n\.tf?\(`)
+
+// keysIn reads the key literals out of one lookup, starting at its opening
+// parenthesis and stopping at the comma that separates the key from the
+// values.
+//
+// It reads the whole first argument rather than the first literal in it,
+// because a call may pick between two keys with a conditional, as the rate
+// count and the archive toast both do, and both keys have to exist. Matching
+// only the literal that follows the parenthesis left those unchecked.
+func keysIn(s string) []string {
+	var out []string
+	var lit strings.Builder
+	depth, quote, esc := 0, false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if quote {
+			switch {
+			case esc:
+				lit.WriteByte(c)
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				quote = false
+				out = append(out, lit.String())
+				lit.Reset()
+			default:
+				lit.WriteByte(c)
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			quote = true
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+			if depth == 0 {
+				return out
+			}
+		case ',':
+			if depth == 1 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// seedPrefix is the key family that names the seeded categories. These are not
+// UI strings: the daemon reads them to rename database rows, so QML never asks
+// for one and the other tests here would not look at them.
+const seedPrefix = "seed.category."
 
 // qmlKeys collects every key named by a literal in QML. A key built by
 // concatenation shows up as its literal prefix, which is why prefixes are
@@ -59,11 +115,14 @@ func qmlKeys(t *testing.T) (exact, prefixes []string) {
 		if readErr != nil {
 			return readErr
 		}
-		for _, m := range keyCall.FindAllStringSubmatch(string(b), -1) {
-			if strings.HasSuffix(m[1], ".") {
-				prefixes = append(prefixes, m[1])
-			} else {
-				exact = append(exact, m[1])
+		text := string(b)
+		for _, loc := range keyCall.FindAllStringIndex(text, -1) {
+			for _, k := range keysIn(text[loc[1]-1:]) {
+				if strings.HasSuffix(k, ".") {
+					prefixes = append(prefixes, k)
+				} else {
+					exact = append(exact, k)
+				}
 			}
 		}
 		return nil
@@ -216,6 +275,102 @@ func TestLanguageFilesAreReachable(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s.json exists but the switcher does not offer it", tag)
+		}
+	}
+}
+
+// TestSeedCategoryKeysMatchTheSeed holds the language files and the seeded
+// taxonomy together, in both directions.
+//
+// Category names are rows rather than labels, so nothing else would notice a
+// category added to the seed with no key to translate it by, or a key left
+// behind naming a category the seed no longer plants.
+func TestSeedCategoryKeysMatchTheSeed(t *testing.T) {
+	en := readLang(t, "en")
+
+	want := map[string]string{}
+	for _, c := range db.SeededCategories() {
+		want[seedPrefix+c.ID] = c.Name
+	}
+
+	var missing, wrong, extra []string
+	for k, name := range want {
+		switch got, ok := en.Strings[k]; {
+		case !ok:
+			missing = append(missing, k)
+		case got != name:
+			wrong = append(wrong, k+": the seed says "+name+", en.json says "+got)
+		}
+	}
+	for k := range en.Strings {
+		if strings.HasPrefix(k, seedPrefix) {
+			if _, ok := want[k]; !ok {
+				extra = append(extra, k)
+			}
+		}
+	}
+
+	for _, s := range [...]struct {
+		what string
+		list []string
+	}{
+		{"the seed plants these with no English string", missing},
+		{"these disagree with the seed", wrong},
+		{"these name a category the seed does not plant", extra},
+	} {
+		if len(s.list) > 0 {
+			sort.Strings(s.list)
+			t.Errorf("%s: %v", s.what, s.list)
+		}
+	}
+}
+
+// TestEverySeedCategoryIsTranslated requires every language to name every
+// seeded category.
+//
+// The subset rule in TestTranslationsMatchEnglish is deliberately relaxed for
+// this family. Elsewhere a missing key falls back to English and costs one
+// label; here it costs a category, and a tree standing half in one language is
+// what issue #3 reported in the first place.
+func TestEverySeedCategoryIsTranslated(t *testing.T) {
+	for _, tag := range languages {
+		doc := readLang(t, tag)
+		var missing []string
+		for _, c := range db.SeededCategories() {
+			if v, ok := doc.Strings[seedPrefix+c.ID]; !ok || strings.TrimSpace(v) == "" {
+				missing = append(missing, c.ID)
+			}
+		}
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			t.Errorf("%s: %d seeded categories with no name: %v", tag, len(missing), missing)
+		}
+	}
+}
+
+// TestTranslatedSiblingsStayDistinct holds, in every language, the invariant
+// UpdateCategory enforces: two categories under one parent must not share a
+// name.
+//
+// The translation pass writes straight to SQL and checks this itself, so a
+// language that collapses two categories into one name does not corrupt
+// anything. It refuses the entire pass, which on a user's machine looks like
+// the feature being broken rather than one string being wrong.
+func TestTranslatedSiblingsStayDistinct(t *testing.T) {
+	seeded := db.SeededCategories()
+	for _, tag := range languages {
+		doc := readLang(t, tag)
+		seen := map[string]string{}
+		for _, c := range seeded {
+			name, ok := doc.Strings[seedPrefix+c.ID]
+			if !ok {
+				continue
+			}
+			key := c.Parent + "\x00" + strings.ToLower(strings.TrimSpace(name))
+			if other, dup := seen[key]; dup {
+				t.Errorf("%s: %s and %s are both %q under the same parent", tag, other, c.ID, name)
+			}
+			seen[key] = c.ID
 		}
 	}
 }

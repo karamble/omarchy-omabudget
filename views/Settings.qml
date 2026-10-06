@@ -29,6 +29,11 @@ Item {
   property var sources: []
   property var fetched: null
   property bool fetching: false
+  // The report from a category translation check, and the press that made it.
+  // A report belongs to one language, so it carries its own tag and is shown
+  // only while that is still the language in hand.
+  property var translated: null
+  property bool translating: false
   readonly property var chosenSource: {
     var id = view.settings ? String(view.settings.rateSource || "") : ""
     for (var i = 0; i < view.sources.length; i++)
@@ -136,6 +141,40 @@ Item {
     var next = Object.assign({}, view.fetched)
     next.held = rest
     view.fetched = next
+  }
+  // Category names are rows in the ledger rather than labels on the screen, so
+  // translating them means renaming them. The check runs first and writes
+  // nothing: what it reports is how many were left alone, which is the part
+  // worth seeing before pressing anything.
+  function previewTranslation() {
+    if (view.translating || !app) return
+    view.translating = true
+    view.translated = null
+    app.query(["category", "translate", I18n.tag, "-dry-run"], function (data, err) {
+      view.translating = false
+      if (err) { view.app.lastError = err; return }
+      view.translated = data
+      view.app.lastError = ""
+    })
+  }
+  function applyTranslation() {
+    if (!view.translated || !app) return
+    app.run(["category", "translate", I18n.tag],
+            I18n.tf("settings.categories.done", [view.languageName(I18n.tag)]))
+    view.translated = null
+  }
+  // The name rather than the tag, because the tag only means something to the
+  // file it names.
+  function languageName(tag) {
+    for (var i = 0; i < I18n.available.length; i++)
+      if (I18n.available[i].tag === tag) return I18n.available[i].name
+    return tag
+  }
+  function keptNames() {
+    var kept = view.translated ? (view.translated.kept || []) : []
+    var names = []
+    for (var i = 0; i < kept.length; i++) names.push(String(kept[i].name))
+    return names.join(", ")
   }
   function lastFetchText() {
     var f = view.settings ? view.settings.lastFetch : null
@@ -506,6 +545,42 @@ Item {
               onChanged: function (v) { view.setLanguage(v) }
             }
             Note { width: parent.width; text: I18n.t("settings.language.note") }
+
+            Caption { text: I18n.t("settings.categories"); topPadding: Style.space(6) }
+            Note { width: parent.width; text: I18n.t("settings.categories.note") }
+            Apply {
+              text: view.translating ? I18n.t("settings.categories.checking") : I18n.t("settings.categories.check")
+              enabled: !view.translating && view.app !== null
+              onClicked: view.previewTranslation()
+            }
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
+              visible: view.translated !== null && view.translated.language === I18n.tag
+              Body {
+                width: parent.width
+                visible: view.translated && (view.translated.renamed || []).length > 0
+                text: view.translated ? I18n.tf("settings.categories.wouldRename",
+                                                [String((view.translated.renamed || []).length)]) : ""
+              }
+              Note {
+                width: parent.width
+                visible: view.translated && (view.translated.kept || []).length > 0
+                text: view.translated ? I18n.tf("settings.categories.kept",
+                                                [String((view.translated.kept || []).length), view.keptNames()]) : ""
+              }
+              Note {
+                width: parent.width
+                visible: view.translated && (view.translated.renamed || []).length === 0
+                text: I18n.t("settings.categories.nothing")
+              }
+              Apply {
+                visible: view.translated && (view.translated.renamed || []).length > 0
+                text: view.translated ? I18n.tf("settings.categories.apply",
+                                                [String((view.translated.renamed || []).length)]) : ""
+                onClicked: view.applyTranslation()
+              }
+            }
           }
 
           TitledCard {

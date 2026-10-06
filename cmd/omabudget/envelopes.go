@@ -82,7 +82,7 @@ func runEnvelopes(args []string) error {
 //	omabudget category goal Accommodation 1200 2027-06
 func runCategory(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: omabudget category add|edit|archive|restore|remove|behaviour|goal ...")
+		return errors.New("usage: omabudget category add|edit|archive|restore|remove|behaviour|goal|translate ...")
 	}
 	switch args[0] {
 	case "add":
@@ -97,8 +97,10 @@ func runCategory(args []string) error {
 		return runCategoryRemove(args[1:])
 	case "behaviour", "goal":
 		return runCategorySet(args)
+	case "translate":
+		return runCategoryTranslate(args[1:])
 	}
-	return fmt.Errorf("unknown category verb %q: add, edit, archive, restore, remove, behaviour or goal", args[0])
+	return fmt.Errorf("unknown category verb %q: add, edit, archive, restore, remove, behaviour, goal or translate", args[0])
 }
 
 func runCategoryAdd(args []string) error {
@@ -219,6 +221,71 @@ func runCategoryRemove(args []string) error {
 		return client.PrintJSON(out)
 	}
 	fmt.Printf("removed %s\n", ref)
+	return nil
+}
+
+// category translate [language] renames the categories the seed plants into
+// one of the shipped languages, or into the one the interface is set to.
+//
+// Category names are rows rather than labels, so this is the only way to
+// translate them. A category renamed by hand is left alone, which is also what
+// makes running it twice cost nothing.
+//
+//	omabudget category translate
+//	omabudget category translate de
+//	omabudget category translate de -dry-run
+func runCategoryTranslate(args []string) error {
+	fs := flag.NewFlagSet("category translate", flag.ExitOnError)
+	c := bind(fs)
+	dry := fs.Bool("dry-run", false, "report what would change and write nothing")
+	pos, err := parseMixed(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) > 1 {
+		return errors.New("usage: omabudget category translate [language] [-dry-run]")
+	}
+	var tag string
+	if len(pos) == 1 {
+		tag = pos[0]
+	}
+
+	cl, err := c.dial()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := timeout()
+	defer cancel()
+
+	var out domain.Translation
+	if err := cl.Do(ctx, "POST", "/api/categories/translate",
+		map[string]any{"language": tag, "dryRun": *dry}, &out); err != nil {
+		return err
+	}
+	if c.json {
+		return client.PrintJSON(out)
+	}
+	return printTranslation(out)
+}
+
+func printTranslation(out domain.Translation) error {
+	did, would := "renamed", "kept"
+	if out.DryRun {
+		did, would = "would rename", "would keep"
+	}
+	fmt.Printf("%s %d categories in %s\n", did, len(out.Renamed), out.Language)
+	if len(out.Kept) > 0 {
+		fmt.Printf("%s %d you renamed yourself:\n", would, len(out.Kept))
+		for _, k := range out.Kept {
+			fmt.Printf("  %s\n", k.Name)
+		}
+	}
+	if len(out.Missing) > 0 {
+		fmt.Printf("%d are no longer here and were not planted again:\n", len(out.Missing))
+		for _, id := range out.Missing {
+			fmt.Printf("  %s\n", id)
+		}
+	}
 	return nil
 }
 
@@ -396,7 +463,7 @@ func runSettings(args []string) error {
 	case len(pos) == 2 && pos[0] == "rate-source":
 		err = cl.Do(ctx, "PUT", "/api/settings", map[string]any{"rateSource": pos[1], "rateSourceUrl": *rawURL}, &out)
 	default:
-		return errors.New("usage: omabudget settings [base-currency <CODE> | model limits|envelope | period-start <1-28> | large-amount <amount> | rate-source <id> [-url URL]]")
+		return errors.New("usage: omabudget settings [base-currency <CODE> | model limits|envelope | period-start <1-28> | large-amount <amount> | language <tag> | rate-source <id> [-url URL]]")
 	}
 	if err != nil {
 		return err
@@ -406,6 +473,11 @@ func runSettings(args []string) error {
 	}
 	fmt.Printf("currency      %s\nrates against %s\nmodel         %s\nperiod start  day %d\nlarge amount  %s\nmonitoring    %v\n",
 		out.BaseCurrency, out.RateReference, out.Model, out.PeriodStartDay, money.New(out.LargeAmount, out.BaseCurrency).Format(), out.Monitoring)
+	language := out.Language
+	if language == "" {
+		language = "en"
+	}
+	fmt.Printf("language      %s\n", language)
 	source := out.RateSource
 	if out.RateSourceURL != "" {
 		source += " at " + out.RateSourceURL

@@ -51,7 +51,10 @@ planning:
   category archive|restore|remove <category>
   category behaviour <category> monthly|rollover|goal|untracked
   category goal <category> <target> <YYYY-MM>
+  category translate [language] [-dry-run]
+                      rename the seeded categories into a shipped language; yours are left alone
   settings            show; settings base-currency <CODE>, model limits|envelope, period-start <day>, large-amount <amount>
+                      language <tag> sets the interface language
                       rate-source <id> [-url URL] chooses where rate fetch reads
   rate                exchange rates on file; rate set <currency> <rate> [-date], rate remove <currency> <date>
   rate fetch          read the chosen source once and file what it quotes; -source, -url for this press only
